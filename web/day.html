@@ -750,10 +750,10 @@
     try{ tg?.ready(); tg?.expand(); } catch {}
 
     // ===== API =====
-    // Авто: локально -> 127.0.0.1:8081, прод -> same-origin
-    const API_BASE = (location.protocol === "file:" || location.hostname === "127.0.0.1" || location.hostname === "localhost")
-      ? "http://127.0.0.1:8081"
-      : "";
+    // можно руками переопределить:
+    // localStorage.setItem("API_BASE","http://127.0.0.1:8081")
+    const API_BASE = (localStorage.getItem("API_BASE") || "").trim() ||
+      ((location.hostname === "127.0.0.1" || location.hostname === "localhost") ? "http://127.0.0.1:8081" : "");
 
     function apiUrl(path){
       const base = (API_BASE || "").replace(/\/$/, "");
@@ -766,6 +766,7 @@
       "123"
     );
 
+    // ключи localStorage (пер-юзер)
     const LEGACY_STORE_KEY = "glass_tasks_v1";
     const LEGACY_DIRTY_DAY_KEY = "glass_day_dirty_v1";
     const LEGACY_CAL_STATE_KEY = "glass_calendar_state";
@@ -799,6 +800,21 @@
       return await res.json().catch(()=> ({}));
     }
 
+    // специальный пост "на выход" — не ждём ответ, не парсим json
+    function postKeepalive(url, bodyStr){
+      try{
+        fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(),
+          },
+          body: bodyStr,
+          keepalive: true,
+        }).catch(()=>{});
+      }catch{}
+    }
+
     function todayKey(){
       const d = new Date();
       return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -816,7 +832,7 @@
       catch { return String(Date.now()) + "_" + Math.random().toString(16).slice(2); }
     }
 
-    // ---------- localStorage (per-user + legacy fallback) ----------
+    // ---------- localStorage (пер-юзер + legacy fallback) ----------
     function loadAll(){
       const v = safeParseJSON(localStorage.getItem(STORE_KEY), null);
       if(v && typeof v === "object") return v;
@@ -939,7 +955,7 @@
       if(navigator.vibrate) navigator.vibrate(kind === "medium" ? 18 : 10);
     }
 
-    // ---------- dirty flags (per-user + legacy fallback) ----------
+    // ---------- dirty flags (пер-юзер + legacy fallback) ----------
     function loadDirtyDayMap(){
       const v = safeParseJSON(localStorage.getItem(DIRTY_DAY_KEY), null);
       if(v && typeof v === "object") return v;
@@ -958,7 +974,20 @@
       return !!m[dateKey];
     }
 
+    // === dateKey ===
+    const qs = new URLSearchParams(location.search);
+    const stateObj =
+      safeParseJSON(localStorage.getItem(CAL_STATE_KEY), null) ||
+      safeParseJSON(localStorage.getItem(LEGACY_CAL_STATE_KEY), {}) || {};
+
+    const candidate = qs.get("date") || stateObj?.selectedKey || todayKey();
+    const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : todayKey();
+
     // ===== server sync =====
+    let tasks = loadTasks(dateKey);
+    sortTasksInPlace(tasks);
+    saveTasks(dateKey, tasks);
+
     function buildPayload(reason){
       return {
         action: "save_day",
@@ -985,28 +1014,37 @@
       setDayDirtyFlag(dateKey, false);
     }
 
-    function postDayToServer(reason){
-      const payload = buildPayload(reason);
-      return fetchJSON(apiUrl("/api/save_day"), {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-    }
-
     function saveDay(reason){
       // local всегда
       saveTasks(dateKey, tasks);
 
-      return postDayToServer(reason)
-        .then(() => {
-          clearDirtyFlagsAll();
-          return true;
-        })
-        .catch((e) => {
-          showErr("API save error: " + (e?.message || e));
-          setDayDirtyFlag(dateKey, true);
-          return false;
-        });
+      const payloadStr = JSON.stringify(buildPayload(reason));
+      return fetchJSON(apiUrl("/api/save_day"), {
+        method: "POST",
+        body: payloadStr,
+      })
+      .then(() => {
+        clearDirtyFlagsAll();
+        return true;
+      })
+      .catch((e) => {
+        // не теряем изменения: день остаётся dirty
+        showErr("API save error: " + (e?.message || e));
+        setDayDirtyFlag(dateKey, true);
+        return false;
+      });
+    }
+
+    // автосейв на изменения (debounce)
+    let autosaveTimer = null;
+    function scheduleAutosave(reason){
+      if(!isDayDirty(dateKey)) return;
+      if(autosaveTimer) clearTimeout(autosaveTimer);
+      autosaveTimer = setTimeout(() => {
+        autosaveTimer = null;
+        // обычный автосейв (с ожиданием)
+        autosaveIfNeeded("debounce:" + (reason || "change"));
+      }, 900);
     }
 
     function pullDayFromServer(){
@@ -1020,6 +1058,7 @@
           tasks = data.tasks.map(normalizeTask);
           sortTasksInPlace(tasks);
           saveTasks(dateKey, tasks);
+          openId = null;
           render();
         })
         .catch((e) => {
@@ -1029,6 +1068,9 @@
 
     function autosaveIfNeeded(reason){
       if(!isDayDirty(dateKey)) return;
+
+      // если пользователь печатает — debounce ещё отработает
+      // но на явных событиях "уходим" — сохраняем сразу
       saveDay("autosave:" + (reason || "unknown"));
 
       if(openId){
@@ -1040,15 +1082,7 @@
       }
     }
 
-    // === dateKey ===
-    const qs = new URLSearchParams(location.search);
-    const stateObj =
-      safeParseJSON(localStorage.getItem(CAL_STATE_KEY), null) ||
-      safeParseJSON(localStorage.getItem(LEGACY_CAL_STATE_KEY), {}) || {};
-
-    const candidate = qs.get("date") || stateObj?.selectedKey || todayKey();
-    const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : todayKey();
-
+    // === UI ===
     const dateTitle = document.getElementById("dateTitle");
     const hintEl = document.getElementById("hint");
     const listEl = document.getElementById("list");
@@ -1056,10 +1090,6 @@
     const backBtn = document.getElementById("backBtn");
     const plusBtn = document.getElementById("plusBtn");
     const clearBtn = document.getElementById("clearBtn");
-
-    let tasks = loadTasks(dateKey);
-    sortTasksInPlace(tasks);
-    saveTasks(dateKey, tasks);
 
     let openId = null;
 
@@ -1114,9 +1144,11 @@
       return !!(t._isNew || t._dirty);
     }
 
-    function markTaskDirty(t){
+    function markTaskDirty(t, reason){
       if(!t._dirty) t._dirty = true;
       setDayDirtyFlag(dateKey, true);
+      // автосейв на любое изменение
+      scheduleAutosave(reason || "edit");
     }
 
     function createTaskCard(t){
@@ -1291,7 +1323,7 @@
         t.done = !t.done;
         card.classList.toggle("done", t.done);
 
-        markTaskDirty(t);
+        markTaskDirty(t, "done");
         saveTasks(dateKey, tasks);
 
         updateActionsVisibility();
@@ -1330,6 +1362,7 @@
         setHint();
         if(tasks.length === 0) renderEmpty();
 
+        // удаление — сразу на сервер
         saveDay("delete");
         haptic("medium");
       });
@@ -1351,7 +1384,7 @@
         if(t.priority !== newP){
           t.priority = newP;
 
-          markTaskDirty(t);
+          markTaskDirty(t, "priority");
           saveTasks(dateKey, tasks);
 
           pillDot.className = "dot " + newP;
@@ -1382,7 +1415,7 @@
         if(field === "desc") t.desc = el.value;
 
         if(prev[field] !== t[field]){
-          markTaskDirty(t);
+          markTaskDirty(t, field);
           updateActionsVisibility();
         }
 
@@ -1459,6 +1492,9 @@
       setHint();
 
       openCardById(nt.id, true);
+
+      // чтобы новая задача тоже ушла (если юзер ничего не введёт)
+      scheduleAutosave("new_task");
     });
 
     clearBtn.addEventListener("click", () => {
@@ -1475,23 +1511,39 @@
       saveTasks(dateKey, tasks);
       render();
 
+      // очистка — сразу на сервер
       saveDay("clear_all");
       haptic("medium");
     });
 
+    // уход/сворачивание
     document.addEventListener("visibilitychange", () => {
       if(document.visibilityState === "hidden"){
         autosaveIfNeeded("visibility_hidden");
       }
     });
 
-    // старт
+    // максимально надёжно: pagehide/beforeunload — шлём keepalive, не ждём ответа
+    function saveOnExit(reason){
+      if(!isDayDirty(dateKey)) return;
+      saveTasks(dateKey, tasks);
+      const payloadStr = JSON.stringify(buildPayload("exit:" + (reason || "unknown")));
+      postKeepalive(apiUrl("/api/save_day"), payloadStr);
+      // dirty не сбрасываем: если не успеет — при следующем заходе "resume_dirty_day"
+    }
+    window.addEventListener("pagehide", () => saveOnExit("pagehide"));
+    window.addEventListener("beforeunload", () => saveOnExit("beforeunload"));
+
+    // старт: сначала локальный UI, потом сервер
     render();
+
     if(isDayDirty(dateKey)){
+      // если были несохранённые изменения — пытаемся догнать сервер
       saveDay("resume_dirty_day").finally(() => pullDayFromServer());
     } else {
       pullDayFromServer();
     }
+
   })();
   </script>
 </body>
