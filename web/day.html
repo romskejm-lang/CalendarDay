@@ -1,2 +1,1462 @@
-﻿<!-- put your day.html here -->
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Day</title>
 
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <style>
+    :root{
+      --bgA: #fbfcff;
+      --bgB: #f3f8ff;
+
+      --lime: 163 230 53;
+      --mint: 110 231 183;
+      --ink: 15 23 42;
+
+      --radius: 22px;
+      --cellRadius: 16px;
+
+      --text: rgb(var(--ink));
+      --muted: rgba(15,23,42,.55);
+    }
+
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Helvetica Neue", sans-serif;
+      color:var(--text);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+
+      overflow:hidden;
+
+      background:
+        radial-gradient(900px 520px at 15% 10%, rgba(var(--lime), .16), transparent 58%),
+        radial-gradient(820px 520px at 88% 14%, rgba(var(--mint), .14), transparent 58%),
+        radial-gradient(900px 650px at 42% 94%, rgba(148,163,184,.20), transparent 58%),
+        linear-gradient(180deg, var(--bgA), var(--bgB));
+    }
+
+    .wrap{ width:min(720px, 100%); }
+
+    .glass{
+      position:relative;
+      border-radius: var(--radius);
+
+      border: 1px solid rgba(255,255,255,.28);
+      background: linear-gradient(135deg, rgba(255,255,255,.22), rgba(255,255,255,.06));
+      box-shadow: 0 18px 70px rgba(15,23,42,.12);
+
+      overflow:hidden;
+
+      backdrop-filter: blur(30px) saturate(190%) contrast(112%);
+      -webkit-backdrop-filter: blur(30px) saturate(190%) contrast(112%);
+
+      max-height: calc(100vh - 36px);
+    }
+    @supports (height: 100dvh){
+      .glass{ max-height: calc(100dvh - 36px); }
+    }
+
+    .glass::before{
+      content:"";
+      position:absolute;
+      inset:-2px;
+      background:
+        radial-gradient(700px 320px at 18% 8%, rgba(255,255,255,.75), transparent 60%),
+        radial-gradient(520px 320px at 88% 0%, rgba(255,255,255,.40), transparent 62%),
+        linear-gradient(180deg, rgba(255,255,255,.20), transparent 40%);
+      opacity:.55;
+      pointer-events:none;
+    }
+
+    .glass::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.28'/%3E%3C/svg%3E") 0 0/180px 180px;
+      mix-blend-mode: overlay;
+      opacity:.08;
+    }
+
+    .inner{
+      position:relative;
+      padding:18px;
+
+      max-height: calc(100vh - 36px);
+      overflow-y:auto;
+      overflow-x:hidden;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+
+      display:flex;
+      flex-direction:column;
+
+      scrollbar-width:none;
+    }
+    .inner::-webkit-scrollbar{ width:0; height:0; }
+    @supports (height: 100dvh){
+      .inner{ max-height: calc(100dvh - 36px); }
+    }
+
+    .inner::before{
+      content:"";
+      position:absolute;
+      inset:-50px;
+      background:
+        radial-gradient(560px 360px at 18% 22%, rgba(var(--lime), .30), transparent 62%),
+        radial-gradient(560px 360px at 82% 18%, rgba(var(--mint), .24), transparent 62%),
+        radial-gradient(640px 380px at 62% 86%, rgba(99,102,241,.14), transparent 64%),
+        radial-gradient(760px 440px at 40% 55%, rgba(148,163,184,.16), transparent 66%),
+        linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0));
+      filter: blur(12px);
+      pointer-events:none;
+      z-index:0;
+    }
+
+    .top, .bar, .list{ position:relative; z-index:1; }
+
+    .stickyHeader{
+      position: sticky;
+      top: 0;
+      z-index: 200;
+
+      background: rgba(255,255,255,.08);
+      backdrop-filter: blur(18px) saturate(170%);
+      -webkit-backdrop-filter: blur(18px) saturate(170%);
+      border-bottom: 1px solid rgba(255,255,255,.22);
+
+      padding-bottom: 6px;
+      margin-bottom: 6px;
+    }
+
+    .top{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:2px 2px 14px 2px;
+    }
+
+    .dateTitle{
+      font-size:18px;
+      font-weight:650;
+      letter-spacing:.2px;
+      user-select:none;
+      text-align:center;
+      flex:1;
+    }
+
+    .nav{
+      display:flex;
+      gap:10px;
+      align-items:center;
+    }
+
+    .iconBtn{
+      width:42px;
+      height:42px;
+      border-radius: 14px;
+      display:grid;
+      place-items:center;
+      cursor:pointer;
+      user-select:none;
+      padding:0;
+      background: transparent;
+      border:0;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      color: var(--text);
+    }
+    .iconBtn svg{ width:18px; height:18px; opacity:.82; }
+
+    .navCell{
+      --btnRadius: 14px;
+
+      border-radius: var(--btnRadius);
+      position:relative;
+      overflow:hidden;
+
+      background:
+        radial-gradient(160px 120px at 28% 18%, rgba(255,255,255,.55), transparent 62%),
+        radial-gradient(180px 140px at 78% 86%, rgba(var(--lime), .10), transparent 62%),
+        linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.06));
+
+      border: 1px solid rgba(255,255,255,.22);
+
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.55),
+        inset 0 -1px 0 rgba(15,23,42,.08),
+        0 10px 26px rgba(15,23,42,.10);
+
+      backdrop-filter: blur(34px) saturate(220%) contrast(120%);
+      -webkit-backdrop-filter: blur(34px) saturate(220%) contrast(120%);
+
+      transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+      z-index:1;
+
+      --shade: .09;
+    }
+
+    .navCell::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      padding:1px;
+      border-radius: var(--btnRadius);
+      background: linear-gradient(135deg, rgba(255,255,255,.70), rgba(255,255,255,0));
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      opacity:.85;
+      pointer-events:none;
+    }
+
+    .navCell::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E") 0 0/160px 160px,
+        linear-gradient(0deg, rgba(15,23,42,1), rgba(15,23,42,1));
+      mix-blend-mode: overlay;
+      opacity: var(--shade);
+      pointer-events:none;
+      transition: opacity .16s ease;
+    }
+
+    .navCell:hover{
+      transform: translateY(-2px);
+      border-color: rgba(255,255,255,.52);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.65),
+        inset 0 -1px 0 rgba(15,23,42,.12),
+        0 20px 60px rgba(15,23,42,.18),
+        0 10px 24px rgba(15,23,42,.12);
+      --shade: .14;
+    }
+
+    .navCell:active{
+      transform: translateY(0) scale(.98);
+      --shade:.16;
+    }
+
+    button:focus{ outline:none; }
+    button:focus-visible{
+      box-shadow:
+        0 0 0 3px rgba(255,255,255,.35),
+        0 10px 26px rgba(15,23,42,.10);
+    }
+
+    .bar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+
+      border-top: 1px solid rgba(255,255,255,.30);
+      padding:12px 2px 10px 2px;
+    }
+
+    .hint{
+      font-size:13px;
+      color: var(--muted);
+      user-select:none;
+    }
+
+    .list{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      padding-bottom: 2px;
+    }
+
+    .task{
+      position:relative;
+      border-radius: 18px;
+      overflow:hidden;
+      border: 1px solid rgba(255,255,255,.24);
+
+      background:
+        radial-gradient(220px 140px at 18% 12%, rgba(255,255,255,.55), transparent 62%),
+        radial-gradient(260px 180px at 86% 86%, rgba(var(--lime), .10), transparent 62%),
+        linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.06));
+
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.55),
+        inset 0 -1px 0 rgba(15,23,42,.08),
+        0 10px 26px rgba(15,23,42,.10);
+
+      backdrop-filter: blur(34px) saturate(220%) contrast(120%);
+      -webkit-backdrop-filter: blur(34px) saturate(220%) contrast(120%);
+
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+      z-index:1;
+
+      -webkit-tap-highlight-color: transparent;
+      will-change: transform;
+
+      scroll-margin-top: 130px;
+    }
+
+    .task::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      padding:1px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(255,255,255,.68), rgba(255,255,255,0));
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      opacity:.85;
+      pointer-events:none;
+    }
+
+    .task:hover{
+      z-index: 60;
+      transform: translateY(-2px);
+      border-color: rgba(255,255,255,.45);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.65),
+        inset 0 -1px 0 rgba(15,23,42,.12),
+        0 24px 70px rgba(15,23,42,.18),
+        0 10px 24px rgba(15,23,42,.12);
+    }
+
+    .task.open{
+      z-index: 40;
+      transform: translateY(-8px);
+      border-color: rgba(255,255,255,.55);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.70),
+        inset 0 -1px 0 rgba(15,23,42,.12),
+        0 34px 95px rgba(15,23,42,.22),
+        0 12px 28px rgba(15,23,42,.14);
+    }
+
+    .task.open:hover{
+      z-index: 60;
+      transform: translateY(-10px);
+    }
+
+    .taskHead{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:14px 14px;
+      cursor:pointer;
+    }
+
+    .check{
+      width:22px;
+      height:22px;
+      border-radius: 999px;
+      border: 1px solid rgba(15,23,42,.18);
+      background: rgba(255,255,255,.28);
+      display:grid;
+      place-items:center;
+      flex:0 0 auto;
+      cursor:pointer;
+    }
+    .check svg{
+      width:14px;
+      height:14px;
+      opacity:0;
+      transition: opacity .12s ease;
+    }
+    .task.done .check svg{ opacity:.90; }
+
+    .meta{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      min-width:0;
+      flex:1;
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      width: fit-content;
+      max-width: 100%;
+      padding:6px 10px;
+      border-radius: 999px;
+      font-size:12px;
+      color: rgba(15,23,42,.75);
+      border: 1px solid rgba(255,255,255,.28);
+      background: rgba(255,255,255,.20);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.55);
+      user-select:none;
+    }
+
+    .dot{
+      width:10px; height:10px;
+      border-radius:999px;
+      display:inline-block;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.55),
+        0 6px 14px rgba(15,23,42,.12);
+      border: 1px solid rgba(15,23,42,.10);
+      flex:0 0 auto;
+    }
+    .dot.green{  background:#22c55e; }
+    .dot.yellow{ background:#facc15; }
+    .dot.red{    background:#ef4444; }
+    .dot.black{  background:#0f172a; }
+
+    .title{
+      font-size:18px;
+      font-weight:700;
+      letter-spacing:.1px;
+      line-height:1.1;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .task.done .title{
+      opacity:.55;
+      text-decoration: line-through;
+    }
+
+    .details{
+      display:none;
+      padding:0 14px 14px 14px;
+    }
+    .task.open .details{
+      display:block;
+    }
+
+    .detailsGrid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+      margin-top: 10px;
+    }
+
+    .card{
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,.22);
+      background: rgba(255,255,255,.14);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.55),
+        inset 0 -1px 0 rgba(15,23,42,.08);
+      padding:12px 12px;
+      min-height: 74px;
+      position:relative;
+      overflow:hidden;
+    }
+
+    .label{
+      font-size:12px;
+      color: rgba(15,23,42,.55);
+      margin-bottom:6px;
+      user-select:none;
+    }
+
+    .rowTime{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+
+    .timeInput{
+      width: 100%;
+      height: 40px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.24);
+      background: rgba(255,255,255,.18);
+      padding: 0 12px;
+      outline:none;
+      font-size:14px;
+      color: rgba(15,23,42,.85);
+      backdrop-filter: blur(18px) saturate(170%);
+      -webkit-backdrop-filter: blur(18px) saturate(170%);
+    }
+
+    .timeSep{
+      font-size:14px;
+      opacity:.6;
+      user-select:none;
+      flex:0 0 auto;
+    }
+
+    .textInput, .textArea{
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.24);
+      background: rgba(255,255,255,.18);
+      padding: 10px 12px;
+      outline:none;
+      font-size:14px;
+      color: rgba(15,23,42,.85);
+      backdrop-filter: blur(18px) saturate(170%);
+      -webkit-backdrop-filter: blur(18px) saturate(170%);
+    }
+    .textArea{ min-height: 80px; resize:none; }
+
+    .detailsWide{ margin-top:12px; }
+
+    .detailsTopRow{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+      margin-top: 2px;
+    }
+
+    .detailsTitle{
+      font-size:22px;
+      font-weight:800;
+      letter-spacing:.1px;
+      line-height:1.1;
+      margin: 4px 0 0 0;
+      flex:1;
+      min-width:0;
+    }
+
+    .closeMini{
+      width:44px;
+      height:44px;
+      --btnRadius: 16px;
+      border-radius: var(--btnRadius);
+      font-size:20px;
+      line-height:1;
+      display:grid;
+      place-items:center;
+      padding:0;
+      user-select:none;
+    }
+    .closeMini:active{ transform: translateY(0) scale(.98); }
+
+    .prioWrap{ margin-top:12px; }
+    .prioHeader{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:10px;
+    }
+    .prioStatus{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      font-size:13px;
+      color: rgba(15,23,42,.70);
+      user-select:none;
+    }
+    .prioBtns{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:flex-start;
+    }
+    .prioBtn{
+      width:44px;
+      height:44px;
+      padding:0;
+      display:grid;
+      place-items:center;
+      border:0;
+      background:transparent;
+      color:var(--text);
+      cursor:pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      user-select:none;
+    }
+    .prioBtn.active{
+      transform: translateY(-2px);
+      --shade: .16;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.70),
+        inset 0 -1px 0 rgba(15,23,42,.12),
+        0 16px 40px rgba(15,23,42,.14);
+    }
+
+    .actions{
+      display:flex;
+      gap:10px;
+      justify-content:flex-end;
+      margin-top:12px;
+    }
+
+    .miniBtn{
+      height:40px;
+      padding:0 14px;
+      border-radius:14px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      font-weight:750;
+      background: transparent;
+      border:0;
+      color: var(--text);
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      user-select:none;
+    }
+    .miniBtn:active{ transform: translateY(0) scale(.98); }
+
+    .emptyState{
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px dashed rgba(255,255,255,.35);
+      background: rgba(255,255,255,.08);
+      color: rgba(15,23,42,.55);
+      font-size: 13px;
+      user-select:none;
+    }
+
+    .errBanner{
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      z-index: 9999;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.85);
+      border: 1px solid rgba(255,255,255,.55);
+      box-shadow: 0 20px 60px rgba(15,23,42,.18);
+      color: rgba(15,23,42,.85);
+      font-size: 12px;
+      display:none;
+    }
+
+    @media (max-width: 480px){
+      .inner{ padding:14px; }
+      .dateTitle{ font-size:16px; }
+      .iconBtn{ width:40px; height:40px; border-radius:13px; }
+      .title{ font-size:16px; }
+      .detailsGrid{ grid-template-columns: 1fr; }
+      .detailsTitle{ font-size:20px; }
+    }
+
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))){
+      .glass, .navCell, .task{ background: rgba(255,255,255,.88); }
+      .glass::after{ display:none; }
+      .inner::before{ display:none; }
+      .navCell::before, .navCell::after{ display:none; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="glass">
+      <div class="inner">
+        <div class="stickyHeader">
+          <div class="top">
+            <button class="iconBtn navCell" id="backBtn" aria-label="Назад">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 18l-6-6 6-6"/>
+              </svg>
+            </button>
+
+            <div class="dateTitle" id="dateTitle">—</div>
+
+            <div class="nav">
+              <!-- ОСТАВИЛИ ТОЛЬКО + -->
+              <button class="iconBtn navCell" id="plusBtn" aria-label="Добавить">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14"/>
+                  <path d="M5 12h14"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="bar">
+            <div class="hint" id="hint">0 задач</div>
+            <button class="iconBtn navCell" id="clearBtn" aria-label="Очистить">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 6h18"/>
+                <path d="M8 6V4h8v2"/>
+                <path d="M19 6l-1 14H6L5 6"/>
+                <path d="M10 11v6"/>
+                <path d="M14 11v6"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="list" id="list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="errBanner" id="errBanner"></div>
+
+  <script>
+  (function(){
+    const errBanner = document.getElementById("errBanner");
+    function showErr(msg){
+      if(!errBanner) return;
+      errBanner.style.display = "block";
+      errBanner.textContent = msg;
+    }
+    window.addEventListener("error", (e) => {
+      const m = (e && e.message) ? e.message : "Unknown JS error";
+      showErr("JS error: " + m);
+    });
+
+    function safeParseJSON(str, fallback){
+      try{
+        if(!str) return fallback;
+        return JSON.parse(str);
+      }catch{
+        return fallback;
+      }
+    }
+
+    function escSel(val){
+      try{
+        if(window.CSS && CSS.escape) return CSS.escape(val);
+      }catch{}
+      return String(val).replace(/["\\]/g, "\\$&");
+    }
+
+    // защита для value="" и textarea
+    function escAttr(s){
+      return String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+    function escTextArea(s){
+      return String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    const tg = window.Telegram?.WebApp;
+    try{ tg?.ready(); tg?.expand(); } catch {}
+
+    const STORE_KEY = "glass_tasks_v1";
+    const DIRTY_DAY_KEY = "glass_day_dirty_v1"; // { "YYYY-MM-DD": true }
+
+    function todayKey(){
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    }
+
+    function formatRuDate(k){
+      const [y,m,d] = k.split("-").map(Number);
+      const dd = new Date(y, m-1, d);
+      const months = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+      return `${d} ${months[dd.getMonth()]} ${y}`;
+    }
+
+    function safeUUID(){
+      try { return crypto.randomUUID(); }
+      catch { return String(Date.now()) + "_" + Math.random().toString(16).slice(2); }
+    }
+
+    function loadAll(){
+      return safeParseJSON(localStorage.getItem(STORE_KEY), {}) || {};
+    }
+
+    function saveAll(obj){
+      localStorage.setItem(STORE_KEY, JSON.stringify(obj));
+    }
+
+    // сохраняем в localStorage БЕЗ UI-флагов (_dirty/_isNew)
+    function packForStore(arr){
+      return arr.map(t => ({
+        id: t.id,
+        title: (t.title ?? "").toString(),
+        desc: (t.desc ?? "").toString(),
+        start: (t.start ?? "").toString(),
+        end: (t.end ?? "").toString(),
+        done: !!t.done,
+        priority: normalizePriority(t.priority),
+        createdAt: Number.isFinite(+t.createdAt) ? +t.createdAt : Date.now()
+      }));
+    }
+
+    function saveTasks(k, tasks){
+      const all = loadAll();
+      all[k] = packForStore(tasks);
+      saveAll(all);
+    }
+
+    function normalizePriority(p){
+      const v = String(p || "green");
+      return (v === "green" || v === "yellow" || v === "red" || v === "black") ? v : "green";
+    }
+
+    function normalizeTask(t){
+      if(t && typeof t === "object"){
+        const id = t.id || safeUUID();
+        return {
+          id,
+          title: (t.title ?? t.text ?? "").toString(),
+          desc: (t.desc ?? "").toString(),
+          start: (t.start ?? "").toString(),
+          end: (t.end ?? "").toString(),
+          done: !!t.done,
+          priority: normalizePriority(t.priority),
+          createdAt: Number.isFinite(+t.createdAt) ? +t.createdAt : Date.now(),
+
+          // UI flags:
+          _dirty: false,   // изменено/не сохранено в БД
+          _isNew: false    // новая задача (после +)
+        };
+      }
+      return { id: safeUUID(), title:"", desc:"", start:"", end:"", done:false, priority:"green", createdAt: Date.now(), _dirty:false, _isNew:false };
+    }
+
+    function loadTasks(k){
+      const all = loadAll();
+      const arr = Array.isArray(all[k]) ? all[k] : [];
+      return arr.map(normalizeTask);
+    }
+
+    function parseTimeToMin(s){
+      const v = (s || "").trim();
+      if(!/^\d{2}:\d{2}$/.test(v)) return null;
+      const [hh, mm] = v.split(":").map(Number);
+      if(hh > 23 || mm > 59) return null;
+      return hh * 60 + mm;
+    }
+
+    function sortTasksInPlace(arr){
+      arr.sort((a,b) => {
+        const aS = parseTimeToMin(a.start);
+        const bS = parseTimeToMin(b.start);
+        const aE = parseTimeToMin(a.end);
+        const bE = parseTimeToMin(b.end);
+
+        const aKey = (aS ?? aE ?? Infinity);
+        const bKey = (bS ?? bE ?? Infinity);
+        if(aKey !== bKey) return aKey - bKey;
+
+        const aC = a.createdAt ?? 0;
+        const bC = b.createdAt ?? 0;
+        if(aC !== bC) return aC - bC;
+
+        const at = (a.title || "").toLowerCase();
+        const bt = (b.title || "").toLowerCase();
+        if(at < bt) return -1;
+        if(at > bt) return 1;
+        return 0;
+      });
+    }
+
+    function timeLabel(t){
+      const s = (t.start || "").trim();
+      const e = (t.end || "").trim();
+      if(s && e) return `${s}—${e}`;
+      if(s && !e) return `${s}`;
+      if(!s && e) return `до ${e}`;
+      return "Без времени";
+    }
+
+    function prioLabel(p){
+      switch(p){
+        case "green": return "Низкий";
+        case "yellow": return "Средний";
+        case "red": return "Высокий";
+        case "black": return "Очень высокий";
+        default: return "Низкий";
+      }
+    }
+
+    function haptic(kind="light"){
+      try{
+        const hf = tg?.HapticFeedback;
+        if(hf){
+          if(kind === "select" && hf.selectionChanged){ hf.selectionChanged(); return; }
+          if(hf.impactOccurred){ hf.impactOccurred(kind === "medium" ? "medium" : "light"); return; }
+        }
+      }catch{}
+      if(navigator.vibrate) navigator.vibrate(kind === "medium" ? 18 : 10);
+    }
+
+    function loadDirtyDayMap(){
+      return safeParseJSON(localStorage.getItem(DIRTY_DAY_KEY), {}) || {};
+    }
+    function setDayDirtyFlag(dateKey, val){
+      const m = loadDirtyDayMap();
+      if(val) m[dateKey] = true;
+      else delete m[dateKey];
+      localStorage.setItem(DIRTY_DAY_KEY, JSON.stringify(m));
+    }
+    function isDayDirty(dateKey){
+      const m = loadDirtyDayMap();
+      return !!m[dateKey];
+    }
+
+    // === DB SAVE (через tg.sendData) ===
+    function buildPayload(reason){
+      return {
+        action: "save_day",
+        reason: reason || "manual",
+        date: dateKey,
+        tasks: tasks.map(t => ({
+          id: t.id,
+          title: t.title || "",
+          desc: t.desc || "",
+          start: t.start || "",
+          end: t.end || "",
+          done: !!t.done,
+          priority: normalizePriority(t.priority),
+          createdAt: t.createdAt || Date.now()
+        }))
+      };
+    }
+
+    function sendDayToDB(reason){
+      // localStorage всегда сохраняем
+      saveTasks(dateKey, tasks);
+
+      // Telegram -> бот -> БД
+      if(!tg || !tg.sendData) return false;
+      try{
+        tg.sendData(JSON.stringify(buildPayload(reason)));
+        return true;
+      }catch(e){
+        showErr("sendData error: " + (e?.message || e));
+        return false;
+      }
+    }
+
+    function clearDirtyFlagsAll(){
+      for(const t of tasks){
+        t._dirty = false;
+        t._isNew = false;
+      }
+      setDayDirtyFlag(dateKey, false);
+    }
+
+    // Автосохранение (если что-то менялось)
+    function autosaveIfNeeded(reason){
+      if(!isDayDirty(dateKey)) return;
+
+      // отправляем весь день одним пакетом
+      sendDayToDB("autosave:" + (reason || "unknown"));
+      clearDirtyFlagsAll();
+
+      // если открытая карточка есть — спрячем кнопки
+      if(openId){
+        const opened = listEl.querySelector(`.task[data-id="${escSel(openId)}"]`);
+        if(opened){
+          const save = opened.querySelector('button[data-action="save"]');
+          if(save) save.style.display = "none";
+        }
+      }
+    }
+
+    // === dateKey ===
+    const qs = new URLSearchParams(location.search);
+    const stateObj = safeParseJSON(localStorage.getItem("glass_calendar_state"), {}) || {};
+    const candidate = qs.get("date") || stateObj?.selectedKey || todayKey();
+    const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : todayKey();
+
+    const dateTitle = document.getElementById("dateTitle");
+    const hintEl = document.getElementById("hint");
+    const listEl = document.getElementById("list");
+
+    const backBtn = document.getElementById("backBtn");
+    const plusBtn = document.getElementById("plusBtn");
+    const clearBtn = document.getElementById("clearBtn");
+
+    let tasks = loadTasks(dateKey);
+    sortTasksInPlace(tasks);
+    saveTasks(dateKey, tasks);
+
+    let openId = null;
+
+    function setHint(){
+      hintEl.textContent = `${tasks.length} задач`;
+    }
+
+    function closeCurrent(autosaveReason){
+      if(!openId) return;
+      autosaveIfNeeded(autosaveReason || "close");
+      const opened = listEl.querySelector(`.task[data-id="${escSel(openId)}"]`);
+      opened?.classList.remove("open");
+      openId = null;
+    }
+
+    function ensureNoEmptyState(){
+      const empty = listEl.querySelector(".emptyState");
+      if(empty) empty.remove();
+    }
+
+    function renderEmpty(){
+      listEl.innerHTML = "";
+      const empty = document.createElement("div");
+      empty.className = "emptyState";
+      empty.textContent = "Пока пусто. Нажми +, чтобы добавить задачу.";
+      listEl.appendChild(empty);
+    }
+
+    function reorderDomByTasks(){
+      for(const t of tasks){
+        const el = listEl.querySelector(`.task[data-id="${escSel(t.id)}"]`);
+        if(el) listEl.appendChild(el);
+      }
+    }
+
+    function openCardById(id, focusTitle){
+      const el = listEl.querySelector(`.task[data-id="${escSel(id)}"]`);
+      if(!el) return;
+
+      // закрываем предыдущую (и автосейвим если нужно)
+      closeCurrent("switch");
+
+      openId = id;
+      el.classList.add("open");
+      el.scrollIntoView({block:"nearest", behavior:"smooth"});
+      if(focusTitle){
+        const input = el.querySelector('input[data-field="title"]');
+        input?.focus?.();
+      }
+    }
+
+    function shouldShowSave(t){
+      // требования:
+      // - новая задача после "+" => показываем кнопки (Save + Delete)
+      // - существующая без изменений => кнопок нет
+      // - существующая изменена => появляются кнопки (Save + Delete)
+      return !!(t._isNew || t._dirty);
+    }
+
+    function markTaskDirty(t){
+      if(!t._dirty) t._dirty = true;
+      setDayDirtyFlag(dateKey, true);
+    }
+
+    function createTaskCard(t){
+      const card = document.createElement("div");
+      card.className = "task" + (t.done ? " done" : "");
+      card.dataset.id = t.id;
+
+      const head = document.createElement("div");
+      head.className = "taskHead";
+
+      const check = document.createElement("div");
+      check.className = "check";
+      check.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6L9 17l-5-5"/>
+        </svg>
+      `;
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+
+      const pill = document.createElement("div");
+      pill.className = "pill";
+
+      const pillDot = document.createElement("span");
+      pillDot.className = "dot " + normalizePriority(t.priority);
+
+      const pillText = document.createElement("span");
+      pillText.textContent = timeLabel(t);
+
+      pill.appendChild(pillDot);
+      pill.appendChild(pillText);
+
+      const title = document.createElement("div");
+      title.className = "title";
+      title.textContent = (t.title || "").trim() || "Без названия";
+
+      meta.appendChild(pill);
+      meta.appendChild(title);
+
+      head.appendChild(check);
+      head.appendChild(meta);
+
+      const details = document.createElement("div");
+      details.className = "details";
+
+      const topRow = document.createElement("div");
+      topRow.className = "detailsTopRow";
+
+      const bigTitle = document.createElement("div");
+      bigTitle.className = "detailsTitle";
+      bigTitle.textContent = (t.title || "").trim() || "Без названия";
+
+      const closeBtn = document.createElement("button");
+      closeBtn.className = "iconBtn navCell closeMini";
+      closeBtn.type = "button";
+      closeBtn.setAttribute("aria-label","Закрыть");
+      closeBtn.textContent = "✕";
+
+      topRow.appendChild(bigTitle);
+      topRow.appendChild(closeBtn);
+
+      const grid = document.createElement("div");
+      grid.className = "detailsGrid";
+
+      const timeCard = document.createElement("div");
+      timeCard.className = "card";
+      timeCard.innerHTML = `
+        <div class="label">Время</div>
+        <div class="rowTime">
+          <input class="timeInput" type="time" value="${escAttr(t.start || "")}" data-field="start" />
+          <span class="timeSep">—</span>
+          <input class="timeInput" type="time" value="${escAttr(t.end || "")}" data-field="end" />
+        </div>
+      `;
+
+      const titleCard = document.createElement("div");
+      titleCard.className = "card";
+      titleCard.innerHTML = `
+        <div class="label">Название</div>
+        <input class="textInput" type="text" value="${escAttr(t.title || "")}" data-field="title" placeholder="Например: Учёба" />
+      `;
+
+      grid.appendChild(timeCard);
+      grid.appendChild(titleCard);
+
+      const descWrap = document.createElement("div");
+      descWrap.className = "detailsWide";
+      descWrap.innerHTML = `
+        <div class="card">
+          <div class="label">Описание</div>
+          <textarea class="textArea" data-field="desc" placeholder="Подробнее...">${escTextArea(t.desc || "")}</textarea>
+        </div>
+      `;
+
+      const prioWrap = document.createElement("div");
+      prioWrap.className = "prioWrap";
+
+      const prioHeader = document.createElement("div");
+      prioHeader.className = "prioHeader";
+
+      const prioStatus = document.createElement("div");
+      prioStatus.className = "prioStatus";
+
+      const prioDot = document.createElement("span");
+      prioDot.className = "dot " + normalizePriority(t.priority);
+
+      const prioText = document.createElement("span");
+      prioText.textContent = `Приоритет: ${prioLabel(normalizePriority(t.priority))}`;
+
+      prioStatus.appendChild(prioDot);
+      prioStatus.appendChild(prioText);
+      prioHeader.appendChild(prioStatus);
+
+      const prioBtns = document.createElement("div");
+      prioBtns.className = "prioBtns";
+
+      const prios = ["green","yellow","red","black"];
+      const prioBtnsEls = [];
+
+      for(const p of prios){
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "prioBtn navCell" + (normalizePriority(t.priority) === p ? " active" : "");
+        b.dataset.prio = p;
+        b.setAttribute("aria-label", `Приоритет: ${prioLabel(p)}`);
+        b.innerHTML = `<span class="dot ${p}"></span>`;
+        prioBtns.appendChild(b);
+        prioBtnsEls.push(b);
+      }
+
+      prioWrap.appendChild(prioHeader);
+      prioWrap.appendChild(prioBtns);
+
+      // === ACTIONS (Save + Delete), но показываем только когда надо ===
+      const actions = document.createElement("div");
+      actions.className = "actions";
+
+      const saveBtn = document.createElement("button");
+      saveBtn.className = "miniBtn navCell";
+      saveBtn.type = "button";
+      saveBtn.textContent = "Сохранить";
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "miniBtn navCell";
+      delBtn.type = "button";
+      delBtn.textContent = "Удалить";
+
+	  saveBtn.dataset.action = "save";
+	  delBtn.dataset.action = "delete";
+
+	  actions.appendChild(saveBtn);
+	  actions.appendChild(delBtn);
+
+   	  // actions всегда видно, но Save — динамически
+	  actions.style.display = "flex";
+	  saveBtn.style.display = shouldShowSave(t) ? "inline-flex" : "none";
+
+
+      details.appendChild(topRow);
+      details.appendChild(grid);
+      details.appendChild(descWrap);
+      details.appendChild(prioWrap);
+      details.appendChild(actions);
+
+      card.appendChild(head);
+      card.appendChild(details);
+
+      function updateActionsVisibility(){
+        saveBtn.style.display = shouldShowSave(t) ? "inline-flex" : "none";
+      }
+
+      // DONE — тоже изменение -> в БД
+      check.addEventListener("click", (e) => {
+        e.stopPropagation();
+        t.done = !t.done;
+        card.classList.toggle("done", t.done);
+
+        markTaskDirty(t);
+        saveTasks(dateKey, tasks);
+
+        // если задача открыта — покажем кнопки (т.к. изменили)
+        updateActionsVisibility();
+
+        haptic("light");
+      });
+
+      // OPEN/CLOSE card
+      head.addEventListener("click", () => {
+        if(openId === t.id){
+          // закрываем текущую -> автосейв
+          closeCurrent("collapse");
+          haptic("select");
+          return;
+        }
+
+        // переключение на другую -> автосейв старой/дня
+        closeCurrent("switch");
+        openId = t.id;
+        card.classList.add("open");
+
+        // при открытии — корректная видимость кнопок
+        updateActionsVisibility();
+
+        haptic("select");
+      });
+
+      closeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeCurrent("close_x");
+        haptic("light");
+      });
+
+      // DELETE (после удаления — сразу отправляем день в БД)
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+
+        tasks = tasks.filter(x => x.id !== t.id);
+        setDayDirtyFlag(dateKey, true); // день изменился (удаление)
+        saveTasks(dateKey, tasks);
+
+        if(openId === t.id) openId = null;
+        card.remove();
+
+        setHint();
+        if(tasks.length === 0) renderEmpty();
+
+        // автосейв сразу (удаление — это действие, лучше сразу фиксировать)
+        sendDayToDB("delete");
+        clearDirtyFlagsAll();
+
+        haptic("medium");
+      });
+
+      // SAVE (ручной)
+      saveBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+
+        // ручное сохранение всего дня (проще для бэка)
+        sendDayToDB("manual_task_save");
+
+        // очищаем флаги — чтобы кнопки пропали
+        clearDirtyFlagsAll();
+        updateActionsVisibility();
+
+        haptic("medium");
+      });
+
+      // PRIORITY change -> dirty
+      prioBtns.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-prio]");
+        if(!btn) return;
+        e.stopPropagation();
+
+        const newP = normalizePriority(btn.dataset.prio);
+        if(t.priority !== newP){
+          t.priority = newP;
+
+          markTaskDirty(t);
+          saveTasks(dateKey, tasks);
+
+          pillDot.className = "dot " + newP;
+          prioDot.className = "dot " + newP;
+          prioText.textContent = `Приоритет: ${prioLabel(newP)}`;
+          for(const b of prioBtnsEls){
+            b.classList.toggle("active", b.dataset.prio === newP);
+          }
+
+          updateActionsVisibility();
+        }
+
+        haptic("light");
+      });
+
+      // FIELDS input/change -> dirty + показываем Save
+      const onField = (e) => {
+        const el = e.target;
+        const field = el?.dataset?.field;
+        if(!field) return;
+
+        const prev = {
+          start: t.start, end: t.end, title: t.title, desc: t.desc
+        };
+
+        if(field === "start") t.start = el.value;
+        if(field === "end") t.end = el.value;
+        if(field === "title") t.title = el.value;
+        if(field === "desc") t.desc = el.value;
+
+        // если реально изменилось — dirty
+        if(prev[field] !== t[field]){
+          markTaskDirty(t);
+          updateActionsVisibility();
+        }
+
+        saveTasks(dateKey, tasks);
+
+        pillText.textContent = timeLabel(t);
+        const cleanTitle = (t.title || "").trim() || "Без названия";
+        title.textContent = cleanTitle;
+        bigTitle.textContent = cleanTitle;
+
+        if(field === "start" || field === "end"){
+          sortTasksInPlace(tasks);
+          saveTasks(dateKey, tasks);
+          reorderDomByTasks();
+        }
+      };
+
+      details.addEventListener("input", onField);
+      details.addEventListener("change", onField);
+
+      return card;
+    }
+
+    function render(){
+      dateTitle.textContent = formatRuDate(dateKey);
+      setHint();
+
+      listEl.innerHTML = "";
+      if(tasks.length === 0){
+        renderEmpty();
+        return;
+      }
+
+      for(const t of tasks){
+        const card = createTaskCard(t);
+        listEl.appendChild(card);
+        if(t.id === openId) card.classList.add("open");
+      }
+    }
+
+    // === MENU BUTTONS -> AUTOSAVE ===
+    backBtn.addEventListener("click", () => {
+      autosaveIfNeeded("back");
+      window.location.href = "calendar.html";
+    });
+
+    plusBtn.addEventListener("click", () => {
+      haptic("light");
+
+      // если что-то было не сохранено — автосейв перед созданием новой
+      autosaveIfNeeded("plus");
+
+      ensureNoEmptyState();
+
+      const nt = normalizeTask({
+        id: safeUUID(),
+        title: "",
+        desc: "",
+        start: "",
+        end: "",
+        done: false,
+        priority: "green",
+        createdAt: Date.now()
+      });
+
+      // новая задача — кнопки должны быть сразу
+      nt._isNew = true;
+      nt._dirty = true;
+      setDayDirtyFlag(dateKey, true);
+
+      tasks.push(nt);
+      sortTasksInPlace(tasks);
+      saveTasks(dateKey, tasks);
+
+      const card = createTaskCard(nt);
+      listEl.appendChild(card);
+      reorderDomByTasks();
+      setHint();
+
+      openCardById(nt.id, true);
+    });
+
+    clearBtn.addEventListener("click", () => {
+      if(tasks.length === 0) return;
+
+      // автосейв текущих изменений перед очисткой (на всякий)
+      autosaveIfNeeded("before_clear");
+
+      const ok = confirm("Очистить все задачи на этот день?");
+      if(!ok) return;
+
+      tasks = [];
+      openId = null;
+      setDayDirtyFlag(dateKey, true);
+      saveTasks(dateKey, tasks);
+      render();
+
+      // очистка = сразу фиксируем в БД
+      sendDayToDB("clear_all");
+      clearDirtyFlagsAll();
+
+      haptic("medium");
+    });
+
+    // === автосейв при уходе/сворачивании вебвью ===
+    document.addEventListener("visibilitychange", () => {
+      if(document.visibilityState === "hidden"){
+        autosaveIfNeeded("visibility_hidden");
+      }
+    });
+
+    // если вдруг была грязь на этом дне (например, перезагрузка)
+    if(isDayDirty(dateKey)){
+      // попробуем сразу отправить на бот (чтобы БД догнала)
+      sendDayToDB("resume_dirty_day");
+      clearDirtyFlagsAll();
+    }
+
+    render();
+  })();
+  </script>
+</body>
+</html>
