@@ -1,2 +1,828 @@
-﻿<!-- put your calendar.html here -->
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Glass Calendar (minimal)</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root{
+      --bgA: #fbfcff;
+      --bgB: #f3f8ff;
 
+      --lime: 163 230 53;
+      --mint: 110 231 183;
+      --ink: 15 23 42;
+
+      --radius: 22px;
+      --cellRadius: 16px;
+
+      --text: rgb(var(--ink));
+      --muted: rgba(15,23,42,.55);
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Helvetica Neue", sans-serif;
+      color:var(--text);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+
+      background:
+        radial-gradient(900px 520px at 15% 10%, rgba(var(--lime), .16), transparent 58%),
+        radial-gradient(820px 520px at 88% 14%, rgba(var(--mint), .14), transparent 58%),
+        radial-gradient(900px 650px at 42% 94%, rgba(148,163,184,.20), transparent 58%),
+        linear-gradient(180deg, var(--bgA), var(--bgB));
+    }
+
+    .wrap{ width:min(720px, 100%); }
+
+    .glass{
+      position:relative;
+      border-radius: var(--radius);
+
+      border: 1px solid rgba(255,255,255,.28);
+      background: linear-gradient(135deg, rgba(255,255,255,.22), rgba(255,255,255,.06));
+      box-shadow: 0 18px 70px rgba(15,23,42,.12);
+
+      overflow:hidden;
+
+      backdrop-filter: blur(30px) saturate(190%) contrast(112%);
+      -webkit-backdrop-filter: blur(30px) saturate(190%) contrast(112%);
+    }
+
+    .glass::before{
+      content:"";
+      position:absolute;
+      inset:-2px;
+      background:
+        radial-gradient(700px 320px at 18% 8%, rgba(255,255,255,.75), transparent 60%),
+        radial-gradient(520px 320px at 88% 0%, rgba(255,255,255,.40), transparent 62%),
+        linear-gradient(180deg, rgba(255,255,255,.20), transparent 40%);
+      opacity:.55;
+      pointer-events:none;
+    }
+
+    .glass::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.28'/%3E%3C/svg%3E") 0 0/180px 180px;
+      mix-blend-mode: overlay;
+      opacity:.08;
+    }
+
+    .inner{
+      position:relative;
+      padding:18px;
+    }
+
+    .inner::before{
+      content:"";
+      position:absolute;
+      inset:-50px;
+      background:
+        radial-gradient(560px 360px at 18% 22%, rgba(var(--lime), .30), transparent 62%),
+        radial-gradient(560px 360px at 82% 18%, rgba(var(--mint), .24), transparent 62%),
+        radial-gradient(640px 380px at 62% 86%, rgba(99,102,241,.14), transparent 64%),
+        radial-gradient(760px 440px at 40% 55%, rgba(148,163,184,.16), transparent 66%),
+        linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0));
+      filter: blur(12px);
+      opacity:1;
+      pointer-events:none;
+      z-index:0;
+    }
+
+    .top, .dow, .grid{ position:relative; z-index:1; }
+
+    .top{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:2px 2px 14px 2px;
+    }
+
+    .monthTitle{
+      font-size:18px;
+      font-weight:650;
+      letter-spacing:.2px;
+      line-height:1;
+      user-select:none;
+    }
+
+    .nav{
+      display:flex;
+      gap:10px;
+      align-items:center;
+    }
+
+    .iconBtn{
+      width:42px;
+      height:42px;
+      border-radius: 14px;
+      display:grid;
+      place-items:center;
+      cursor:pointer;
+      user-select:none;
+      padding:0;
+      background: transparent;
+      border:0;
+    }
+    .iconBtn svg{ width:18px; height:18px; opacity:.82; }
+
+    .navCell{
+      border-radius: 14px;
+      position:relative;
+      overflow:hidden;
+
+      background:
+        radial-gradient(160px 120px at 28% 18%, rgba(255,255,255,.55), transparent 62%),
+        radial-gradient(180px 140px at 78% 86%, rgba(var(--lime), .10), transparent 62%),
+        linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.06));
+
+      border: 1px solid rgba(255,255,255,.22);
+
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.55),
+        inset 0 -1px 0 rgba(15,23,42,.08),
+        0 10px 26px rgba(15,23,42,.10);
+
+      backdrop-filter: blur(34px) saturate(220%) contrast(120%);
+      -webkit-backdrop-filter: blur(34px) saturate(220%) contrast(120%);
+
+      transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+      z-index:1;
+
+      --shade: .09;
+    }
+
+    .navCell::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      padding:1px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(255,255,255,.70), rgba(255,255,255,0));
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      opacity:.85;
+      pointer-events:none;
+    }
+
+    .navCell::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E") 0 0/160px 160px,
+        linear-gradient(0deg, rgba(15,23,42,1), rgba(15,23,42,1));
+      mix-blend-mode: overlay;
+      opacity: var(--shade);
+      pointer-events:none;
+      transition: opacity .16s ease;
+    }
+
+    /* ПК hover — НЕ ТРОГАЕМ */
+    .navCell:hover{
+      z-index: 10;
+      transform: translateY(-4px) scale(1.02);
+      border-color: rgba(255,255,255,.52);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.65),
+        inset 0 -1px 0 rgba(15,23,42,.12),
+        0 30px 80px rgba(15,23,42,.22),
+        0 10px 24px rgba(15,23,42,.14);
+      --shade: .14;
+    }
+
+    .navCell:active{
+      z-index: 10;
+      transform: translateY(-3px) scale(1.02);
+      border-color: rgba(255,255,255,.52);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.65),
+        inset 0 -1px 0 rgba(15,23,42,.12),
+        0 28px 74px rgba(15,23,42,.20),
+        0 10px 24px rgba(15,23,42,.14);
+      --shade: .16;
+    }
+
+    /* ✅ добавили: тап-анимация для nav на телефоне */
+    .navCell.tap{
+      z-index: 10;
+      transform: translateY(-4px) scale(1.02);
+      border-color: rgba(255,255,255,.52);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.65),
+        inset 0 -1px 0 rgba(15,23,42,.12),
+        0 30px 80px rgba(15,23,42,.22),
+        0 10px 24px rgba(15,23,42,.14);
+      --shade: .14;
+    }
+
+    .dow{
+      display:grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap:10px;
+      padding:4px 0 10px 0;
+    }
+    .dow div{
+      text-align:center;
+      font-size:12px;
+      color: var(--muted);
+      user-select:none;
+      letter-spacing:.2px;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap:10px;
+    }
+
+    .cell{
+      aspect-ratio: 1 / 1;
+      border-radius: var(--cellRadius);
+      position:relative;
+      overflow:hidden;
+
+      background:
+        radial-gradient(160px 120px at 28% 18%, rgba(255,255,255,.55), transparent 62%),
+        radial-gradient(180px 140px at 78% 86%, rgba(var(--lime), .10), transparent 62%),
+        linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.06));
+
+      border: 1px solid rgba(255,255,255,.22);
+
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.55),
+        inset 0 -1px 0 rgba(15,23,42,.08),
+        0 10px 26px rgba(15,23,42,.10);
+
+      backdrop-filter: blur(34px) saturate(220%) contrast(120%);
+      -webkit-backdrop-filter: blur(34px) saturate(220%) contrast(120%);
+
+      transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+      z-index:1;
+      --shade: .09;
+    }
+
+    .cell::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      padding:1px;
+      border-radius: var(--cellRadius);
+      background: linear-gradient(135deg, rgba(255,255,255,.70), rgba(255,255,255,0));
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      opacity:.85;
+      pointer-events:none;
+    }
+
+    .cell::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E") 0 0/160px 160px,
+        linear-gradient(0deg, rgba(15,23,42,1), rgba(15,23,42,1));
+      mix-blend-mode: overlay;
+      opacity: var(--shade);
+      pointer-events:none;
+      transition: opacity .16s ease;
+    }
+
+    .cell.empty{
+      opacity:0;
+      border:0;
+      box-shadow:none;
+      backdrop-filter:none;
+      -webkit-backdrop-filter:none;
+      pointer-events:none;
+    }
+    .cell.empty::before,
+    .cell.empty::after{ display:none; }
+
+    .dayBtn{
+      width:100%;
+      height:100%;
+      border:0;
+      background: transparent;
+      color: var(--text);
+      font-size:14px;
+      font-weight:650;
+      cursor:pointer;
+      display:grid;
+      place-items:center;
+      padding:0;
+      border-radius: var(--cellRadius);
+      position:relative;
+      z-index:1;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .dayBtn:active{
+      transform: scale(.985);
+    }
+
+    /* ПК hover — НЕ ТРОГАЕМ */
+    .cell:not(.empty):hover{
+      z-index: 10;
+      transform: translateY(-4px) scale(1.02);
+      border-color: rgba(255,255,255,.52);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.65),
+        inset 0 -1px 0 rgba(15,23,42,.12),
+        0 30px 80px rgba(15,23,42,.22),
+        0 10px 24px rgba(15,23,42,.14);
+    }
+    .cell:not(.empty):hover{ --shade: .14; }
+
+    /* ✅ телефонная "hover-имитация" */
+    .cell.tap{
+      z-index: 10;
+      transform: translateY(-4px) scale(1.02);
+      border-color: rgba(255,255,255,.52);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.65),
+        inset 0 -1px 0 rgba(15,23,42,.12),
+        0 30px 80px rgba(15,23,42,.22),
+        0 10px 24px rgba(15,23,42,.14);
+      --shade: .14;
+    }
+	
+	/* убрать серый/синий подсвет тапа в моб. браузерах */
+	.dayBtn, .iconBtn{
+	  -webkit-tap-highlight-color: transparent;
+	  touch-action: manipulation;
+	}
+
+	/* Телефон: отдельный класс "продавить внутрь" (ПК hover не трогаем) */
+	@media (hover: none) and (pointer: coarse){
+	  .cell.press{
+		z-index: 12;
+		transform: translateY(1px) scale(.97);
+		border-color: rgba(255,255,255,.55);
+		box-shadow:
+		  inset 0 2px 12px rgba(15,23,42,.14),
+		  inset 0 1px 0 rgba(255,255,255,.55),
+		  0 8px 18px rgba(15,23,42,.12);
+		--shade: .18;
+	  }
+
+	  .navCell.press{
+		transform: translateY(1px) scale(.97);
+		border-color: rgba(255,255,255,.55);
+		box-shadow:
+		  inset 0 2px 12px rgba(15,23,42,.14),
+		  inset 0 1px 0 rgba(255,255,255,.55),
+		  0 8px 18px rgba(15,23,42,.12);
+		--shade: .16;
+	  }
+	}
+	
+
+    .cell:not(.empty):active,
+    .cell:not(.empty):focus-within{
+      z-index: 10;
+      transform: translateY(-3px) scale(1.02);
+      border-color: rgba(255,255,255,.52);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.65),
+        inset 0 -1px 0 rgba(15,23,42,.12),
+        0 28px 74px rgba(15,23,42,.20),
+        0 10px 24px rgba(15,23,42,.14);
+      --shade: .16;
+    }
+
+    .cell.today{
+      border-color: rgba(var(--lime), .22);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.60),
+        inset 0 -1px 0 rgba(15,23,42,.10),
+        0 14px 36px rgba(var(--lime), .12),
+        0 12px 28px rgba(15,23,42,.10);
+      --shade: .13;
+    }
+
+    .cell.selected{
+      border-color: rgba(255,255,255,.42);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.62),
+        inset 0 -1px 0 rgba(15,23,42,.12),
+        0 22px 58px rgba(15,23,42,.16);
+      --shade: .20;
+    }
+
+    .cell.today.selected{
+      --shade: .24;
+    }
+
+    @media (max-width: 480px){
+      .inner{ padding:14px; }
+      .grid, .dow{ gap:8px; }
+      .iconBtn{ width:40px; height:40px; border-radius: 13px; }
+      .monthTitle{ font-size:16px; }
+      .dayBtn{ font-size:13px; }
+    }
+
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))){
+      .glass, .iconBtn, .cell{
+        background: rgba(255,255,255,.88);
+      }
+      .cell::before{ display:none; }
+      .cell::after{ display:none; }
+      .inner::before{ display:none; }
+    }
+	
+	/* --- Task indicator dot (top-right) --- */
+	.dot{
+	  position:absolute;
+	  top:8px;
+	  right:8px;
+	  width:9px;
+	  height:9px;
+	  border-radius:999px;
+	  pointer-events:none;
+	  z-index:2;
+
+	  /* чтобы выглядел как “стеклянная бусина” */
+	  border: 1px solid rgba(255,255,255,.70);
+	  box-shadow:
+		0 6px 14px rgba(15,23,42,.14),
+		inset 0 1px 0 rgba(255,255,255,.55);
+	}
+
+	/* цвета (зелёный максимально похож на твой скрин) */
+	.dot.green{  background:#22c55e; }  /* 1..3 */
+	.dot.yellow{ background:#facc15; }  /* 4..5 */
+	.dot.red{    background:#ef4444; }  /* 6..10 */
+	.dot.black{  background:#0f172a; }  /* >10 */
+	
+	
+	
+	
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="glass">
+      <div class="inner">
+        <div class="top">
+          <div class="monthTitle" id="monthTitle">—</div>
+          <div class="nav">
+            <button class="iconBtn navCell" id="prevBtn" aria-label="Назад">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 18l-6-6 6-6"/>
+              </svg>
+            </button>
+            <button class="iconBtn navCell" id="nextBtn" aria-label="Вперёд">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 6l6 6-6 6"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="dow" aria-hidden="true">
+          <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Вс</div>
+        </div>
+
+        <div class="grid" id="grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    tg?.ready();
+    tg?.expand();
+	
+	const isTouch = window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches;
+
+	let selectedCellEl = null;   // только для телефона: чтобы не делать render()
+	let isNavigating = false;    // защита от двойного клика в момент перехода
+
+	function haptic(kind="light"){
+	  if(!isTouch) return;
+
+	  // Telegram haptics (лучше всего)
+	  try{
+		const hf = tg?.HapticFeedback;
+		if(hf){
+		  if(kind === "select" && hf.selectionChanged){
+			hf.selectionChanged();
+			return;
+		  }
+		  if(hf.impactOccurred){
+			hf.impactOccurred(kind === "medium" ? "medium" : "light");
+			return;
+		  }
+		}
+	  }catch(e){}
+
+	  // fallback
+	  if(navigator.vibrate){
+		navigator.vibrate(kind === "medium" ? 18 : 10);
+	  }
+	}
+
+	function pulseCell(cell){
+	  if(!isTouch || !cell) return;
+	  cell.classList.remove("tap");
+	  void cell.offsetWidth;
+	  cell.classList.add("tap");
+	  setTimeout(() => cell.classList.remove("tap"), 170);
+	}
+
+	function pressCell(el){
+	  if(!isTouch || !el) return;
+	  el.classList.remove("press");
+	  void el.offsetWidth;
+	  el.classList.add("press");
+	  setTimeout(() => el.classList.remove("press"), 170);
+	}
+
+	function setSelectedTouch(cell, k){
+	  // не пересобираем DOM => анимация не умирает
+	  if(selectedCellEl) selectedCellEl.classList.remove("selected");
+	  cell.classList.add("selected");
+	  selectedCellEl = cell;
+
+	  view.selectedKey = k;
+	  saveState();
+	}
+	
+
+    const monthNames = [
+      "Январь","Февраль","Март","Апрель","Май","Июнь",
+      "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"
+    ];
+
+    const gridEl = document.getElementById("grid");
+    const titleEl = document.getElementById("monthTitle");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+
+    const today = new Date();
+    const todayKey = keyOf(today);
+
+    let view = loadState() || {
+      year: today.getFullYear(),
+      month: today.getMonth(),
+      selectedKey: todayKey
+    };
+
+    function isTouchPointer(e){
+      // pointerType есть в современных WebView Telegram на Android
+      return e && (e.pointerType === "touch");
+    }
+
+    function hapticLight(){
+      try{
+        if (tg?.HapticFeedback?.impactOccurred) {
+          tg.HapticFeedback.impactOccurred("light");
+          return;
+        }
+      }catch{}
+      try{ navigator.vibrate?.(10); }catch{}
+    }
+
+    function hapticMedium(){
+      try{
+        if (tg?.HapticFeedback?.impactOccurred) {
+          tg.HapticFeedback.impactOccurred("medium");
+          return;
+        }
+      }catch{}
+      try{ navigator.vibrate?.(18); }catch{}
+    }
+
+    function pulse(el){
+      if(!el) return;
+      el.classList.remove("tap");
+      void el.offsetWidth;
+      el.classList.add("tap");
+      setTimeout(() => el.classList.remove("tap"), 170);
+    }
+
+    function keyOf(d){
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,"0");
+      const day = String(d.getDate()).padStart(2,"0");
+      return `${y}-${m}-${day}`;
+    }
+
+    function saveState(){
+      localStorage.setItem("glass_calendar_state", JSON.stringify(view));
+    }
+
+    function loadState(){
+      try{
+        const raw = localStorage.getItem("glass_calendar_state");
+        if(!raw) return null;
+        const v = JSON.parse(raw);
+        if(typeof v?.year !== "number" || typeof v?.month !== "number") return null;
+        if(typeof v?.selectedKey !== "string") v.selectedKey = todayKey;
+        return v;
+      }catch{ return null; }
+    }
+
+    function mondayIndex(jsDay){
+      return (jsDay + 6) % 7;
+    }
+
+    function daysInMonth(year, month){
+      return new Date(year, month + 1, 0).getDate();
+    }
+
+
+	const TASKS_STORE_KEY = "glass_tasks_v1"; // как в day.html
+
+	function getTaskCount(dateKey){
+	  try{
+		const all = JSON.parse(localStorage.getItem(TASKS_STORE_KEY) || "{}");
+		const arr = all?.[dateKey];
+		return Array.isArray(arr) ? arr.length : 0;
+	  }catch{
+		return 0;
+	  }
+	}
+
+
+	function dotClassForCount(n){
+	  if(n <= 0) return null;
+	  if(n <= 3) return "green";
+	  if(n <= 5) return "yellow";
+	  if(n <= 10) return "red";
+	  return "black";
+	}
+
+
+    function render(){
+	  selectedCellEl = null;
+      titleEl.textContent = `${monthNames[view.month]} ${view.year}`;
+      gridEl.innerHTML = "";
+
+      const first = new Date(view.year, view.month, 1);
+      const offset = mondayIndex(first.getDay());
+      const dim = daysInMonth(view.year, view.month);
+
+      for(let i=0;i<offset;i++){
+        gridEl.appendChild(makeEmptyCell());
+      }
+
+      for(let day=1; day<=dim; day++){
+        const d = new Date(view.year, view.month, day);
+        const k = keyOf(d);
+
+        const cell = document.createElement("div");
+        cell.className = "cell";
+		cell.dataset.key = k;
+
+
+        if(k === todayKey) cell.classList.add("today");
+        if(k === view.selectedKey){
+		  cell.classList.add("selected");
+		  selectedCellEl = cell; // чтобы телефон знал, что сейчас выбрано
+		}
+
+		const count = getTaskCount(k);
+		const cls = dotClassForCount(count);
+		if(cls){
+		  const dot = document.createElement("span");
+		  dot.className = `dot ${cls}`;
+		  dot.title = `${count} задач`; // optional
+		  cell.appendChild(dot);
+		}
+
+
+        const btn = document.createElement("button");
+        btn.className = "dayBtn";
+        btn.type = "button";
+        btn.textContent = day;
+        btn.setAttribute("data-key", k);
+
+        // ✅ На телефоне запускаем lift сразу при касании (до click)
+		btn.addEventListener("click", () => {
+		  if(isNavigating) return;
+
+		  const isSecondTap = (view.selectedKey === k);
+
+		  // --- ТЕЛЕФОН ---
+		  if(isTouch){
+			if(!isSecondTap){
+			  // 1-й тап: подпрыгнул + мягкая хаптика + выбрать без render()
+			  pulseCell(cell);
+			  haptic("select");
+			  setSelectedTouch(cell, k);
+			  return;
+			}
+
+			// 2-й тап: продавить + более сильная хаптика + задержка и переход
+			isNavigating = true;
+			pressCell(cell);
+			haptic("medium");
+
+			setTimeout(() => {
+			  window.location.href = `day.html?date=${encodeURIComponent(k)}`;
+			}, 140); // можешь играться 120..180
+			return;
+		  }
+
+		  // --- ПК (оставляем как было, hover не трогаем) ---
+		  if(!isSecondTap){
+			view.selectedKey = k;
+			saveState();
+			render();
+			return;
+		  }
+
+		  window.location.href = `day.html?date=${encodeURIComponent(k)}`;
+		});
+
+
+        cell.appendChild(btn);
+        gridEl.appendChild(cell);
+      }
+
+      const totalCells = offset + dim;
+      const rest = (7 - (totalCells % 7)) % 7;
+      for(let i=0;i<rest;i++){
+        gridEl.appendChild(makeEmptyCell());
+      }
+    }
+
+    function makeEmptyCell(){
+      const c = document.createElement("div");
+      c.className = "cell empty";
+      c.setAttribute("aria-hidden","true");
+      return c;
+    }
+
+    // ✅ Тап-анимация + хаптик на навигации месяцев (телефон)
+    prevBtn.addEventListener("pointerdown", (e) => {
+      if (!isTouchPointer(e)) return;
+      prevBtn.dataset.tp = "1";
+      pulse(prevBtn);
+      hapticLight();
+    }, { passive: true });
+
+    nextBtn.addEventListener("pointerdown", (e) => {
+      if (!isTouchPointer(e)) return;
+      nextBtn.dataset.tp = "1";
+      pulse(nextBtn);
+      hapticLight();
+    }, { passive: true });
+
+    prevBtn.addEventListener("click", () => {
+      const touched = (prevBtn.dataset.tp === "1");
+      if (touched) delete prevBtn.dataset.tp;
+
+      view.month--;
+      if(view.month < 0){ view.month = 11; view.year--; }
+      saveState();
+
+      if (touched) {
+        // ✅ даём тап-анимации дожить
+        setTimeout(render, 170);
+      } else {
+        render();
+      }
+    });
+
+    nextBtn.addEventListener("click", () => {
+      const touched = (nextBtn.dataset.tp === "1");
+      if (touched) delete nextBtn.dataset.tp;
+
+      view.month++;
+      if(view.month > 11){ view.month = 0; view.year++; }
+      saveState();
+
+      if (touched) {
+        setTimeout(render, 170);
+      } else {
+        render();
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>
