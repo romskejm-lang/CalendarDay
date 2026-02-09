@@ -673,7 +673,6 @@
             <div class="dateTitle" id="dateTitle">—</div>
 
             <div class="nav">
-              <!-- ОСТАВИЛИ ТОЛЬКО + -->
               <button class="iconBtn navCell" id="plusBtn" aria-label="Добавить">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M12 5v14"/>
@@ -733,7 +732,6 @@
       return String(val).replace(/["\\]/g, "\\$&");
     }
 
-    // защита для value="" и textarea
     function escAttr(s){
       return String(s ?? "")
         .replace(/&/g, "&amp;")
@@ -751,8 +749,55 @@
     const tg = window.Telegram?.WebApp;
     try{ tg?.ready(); tg?.expand(); } catch {}
 
-    const STORE_KEY = "glass_tasks_v1";
-    const DIRTY_DAY_KEY = "glass_day_dirty_v1"; // { "YYYY-MM-DD": true }
+    // ===== API =====
+    // Авто: локально -> 127.0.0.1:8081, прод -> same-origin
+    const API_BASE = (location.protocol === "file:" || location.hostname === "127.0.0.1" || location.hostname === "localhost")
+      ? "http://127.0.0.1:8081"
+      : "";
+
+    function apiUrl(path){
+      const base = (API_BASE || "").replace(/\/$/, "");
+      return base ? (base + path) : path;
+    }
+
+    const USER_ID = String(
+      tg?.initDataUnsafe?.user?.id ||
+      localStorage.getItem("dev_uid") ||
+      "123"
+    );
+
+    const LEGACY_STORE_KEY = "glass_tasks_v1";
+    const LEGACY_DIRTY_DAY_KEY = "glass_day_dirty_v1";
+    const LEGACY_CAL_STATE_KEY = "glass_calendar_state";
+
+    const STORE_KEY = `glass_tasks_v1_${USER_ID}`;
+    const DIRTY_DAY_KEY = `glass_day_dirty_v1_${USER_ID}`;
+    const CAL_STATE_KEY = `glass_calendar_state_${USER_ID}`;
+
+    function authHeaders(){
+      const h = {};
+      if (tg?.initData) h["X-Tg-Init-Data"] = tg.initData;
+      else h["X-Dev-User-Id"] = USER_ID;
+      return h;
+    }
+
+    async function fetchJSON(url, opts={}){
+      const res = await fetch(url, {
+        ...opts,
+        headers: {
+          "Content-Type": "application/json",
+          ...(opts.headers || {}),
+          ...authHeaders(),
+        },
+        keepalive: true,
+      });
+
+      if(!res.ok){
+        const txt = await res.text().catch(()=> "");
+        throw new Error(`HTTP ${res.status}: ${txt || res.statusText}`);
+      }
+      return await res.json().catch(()=> ({}));
+    }
 
     function todayKey(){
       const d = new Date();
@@ -771,15 +816,18 @@
       catch { return String(Date.now()) + "_" + Math.random().toString(16).slice(2); }
     }
 
+    // ---------- localStorage (per-user + legacy fallback) ----------
     function loadAll(){
-      return safeParseJSON(localStorage.getItem(STORE_KEY), {}) || {};
+      const v = safeParseJSON(localStorage.getItem(STORE_KEY), null);
+      if(v && typeof v === "object") return v;
+      const legacy = safeParseJSON(localStorage.getItem(LEGACY_STORE_KEY), {});
+      return legacy || {};
     }
 
     function saveAll(obj){
       localStorage.setItem(STORE_KEY, JSON.stringify(obj));
     }
 
-    // сохраняем в localStorage БЕЗ UI-флагов (_dirty/_isNew)
     function packForStore(arr){
       return arr.map(t => ({
         id: t.id,
@@ -817,9 +865,8 @@
           priority: normalizePriority(t.priority),
           createdAt: Number.isFinite(+t.createdAt) ? +t.createdAt : Date.now(),
 
-          // UI flags:
-          _dirty: false,   // изменено/не сохранено в БД
-          _isNew: false    // новая задача (после +)
+          _dirty: false,
+          _isNew: false
         };
       }
       return { id: safeUUID(), title:"", desc:"", start:"", end:"", done:false, priority:"green", createdAt: Date.now(), _dirty:false, _isNew:false };
@@ -892,8 +939,13 @@
       if(navigator.vibrate) navigator.vibrate(kind === "medium" ? 18 : 10);
     }
 
+    // ---------- dirty flags (per-user + legacy fallback) ----------
     function loadDirtyDayMap(){
-      return safeParseJSON(localStorage.getItem(DIRTY_DAY_KEY), {}) || {};
+      const v = safeParseJSON(localStorage.getItem(DIRTY_DAY_KEY), null);
+      if(v && typeof v === "object") return v;
+
+      const legacy = safeParseJSON(localStorage.getItem(LEGACY_DIRTY_DAY_KEY), {});
+      return legacy || {};
     }
     function setDayDirtyFlag(dateKey, val){
       const m = loadDirtyDayMap();
@@ -906,7 +958,7 @@
       return !!m[dateKey];
     }
 
-    // === DB SAVE (через tg.sendData) ===
+    // ===== server sync =====
     function buildPayload(reason){
       return {
         action: "save_day",
@@ -925,21 +977,6 @@
       };
     }
 
-    function sendDayToDB(reason){
-      // localStorage всегда сохраняем
-      saveTasks(dateKey, tasks);
-
-      // Telegram -> бот -> БД
-      if(!tg || !tg.sendData) return false;
-      try{
-        tg.sendData(JSON.stringify(buildPayload(reason)));
-        return true;
-      }catch(e){
-        showErr("sendData error: " + (e?.message || e));
-        return false;
-      }
-    }
-
     function clearDirtyFlagsAll(){
       for(const t of tasks){
         t._dirty = false;
@@ -948,15 +985,52 @@
       setDayDirtyFlag(dateKey, false);
     }
 
-    // Автосохранение (если что-то менялось)
+    function postDayToServer(reason){
+      const payload = buildPayload(reason);
+      return fetchJSON(apiUrl("/api/save_day"), {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    }
+
+    function saveDay(reason){
+      // local всегда
+      saveTasks(dateKey, tasks);
+
+      return postDayToServer(reason)
+        .then(() => {
+          clearDirtyFlagsAll();
+          return true;
+        })
+        .catch((e) => {
+          showErr("API save error: " + (e?.message || e));
+          setDayDirtyFlag(dateKey, true);
+          return false;
+        });
+    }
+
+    function pullDayFromServer(){
+      return fetchJSON(apiUrl(`/api/day?date=${encodeURIComponent(dateKey)}`), { method: "GET" })
+        .then((data) => {
+          if(!data || !Array.isArray(data.tasks)) return;
+
+          // если есть несохранённые локальные изменения — не перетирать
+          if(isDayDirty(dateKey)) return;
+
+          tasks = data.tasks.map(normalizeTask);
+          sortTasksInPlace(tasks);
+          saveTasks(dateKey, tasks);
+          render();
+        })
+        .catch((e) => {
+          showErr("API load error: " + (e?.message || e));
+        });
+    }
+
     function autosaveIfNeeded(reason){
       if(!isDayDirty(dateKey)) return;
+      saveDay("autosave:" + (reason || "unknown"));
 
-      // отправляем весь день одним пакетом
-      sendDayToDB("autosave:" + (reason || "unknown"));
-      clearDirtyFlagsAll();
-
-      // если открытая карточка есть — спрячем кнопки
       if(openId){
         const opened = listEl.querySelector(`.task[data-id="${escSel(openId)}"]`);
         if(opened){
@@ -968,7 +1042,10 @@
 
     // === dateKey ===
     const qs = new URLSearchParams(location.search);
-    const stateObj = safeParseJSON(localStorage.getItem("glass_calendar_state"), {}) || {};
+    const stateObj =
+      safeParseJSON(localStorage.getItem(CAL_STATE_KEY), null) ||
+      safeParseJSON(localStorage.getItem(LEGACY_CAL_STATE_KEY), {}) || {};
+
     const candidate = qs.get("date") || stateObj?.selectedKey || todayKey();
     const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : todayKey();
 
@@ -1022,7 +1099,6 @@
       const el = listEl.querySelector(`.task[data-id="${escSel(id)}"]`);
       if(!el) return;
 
-      // закрываем предыдущую (и автосейвим если нужно)
       closeCurrent("switch");
 
       openId = id;
@@ -1035,10 +1111,6 @@
     }
 
     function shouldShowSave(t){
-      // требования:
-      // - новая задача после "+" => показываем кнопки (Save + Delete)
-      // - существующая без изменений => кнопок нет
-      // - существующая изменена => появляются кнопки (Save + Delete)
       return !!(t._isNew || t._dirty);
     }
 
@@ -1179,7 +1251,6 @@
       prioWrap.appendChild(prioHeader);
       prioWrap.appendChild(prioBtns);
 
-      // === ACTIONS (Save + Delete), но показываем только когда надо ===
       const actions = document.createElement("div");
       actions.className = "actions";
 
@@ -1193,16 +1264,14 @@
       delBtn.type = "button";
       delBtn.textContent = "Удалить";
 
-	  saveBtn.dataset.action = "save";
-	  delBtn.dataset.action = "delete";
+      saveBtn.dataset.action = "save";
+      delBtn.dataset.action = "delete";
 
-	  actions.appendChild(saveBtn);
-	  actions.appendChild(delBtn);
+      actions.appendChild(saveBtn);
+      actions.appendChild(delBtn);
 
-   	  // actions всегда видно, но Save — динамически
-	  actions.style.display = "flex";
-	  saveBtn.style.display = shouldShowSave(t) ? "inline-flex" : "none";
-
+      actions.style.display = "flex";
+      saveBtn.style.display = shouldShowSave(t) ? "inline-flex" : "none";
 
       details.appendChild(topRow);
       details.appendChild(grid);
@@ -1217,7 +1286,6 @@
         saveBtn.style.display = shouldShowSave(t) ? "inline-flex" : "none";
       }
 
-      // DONE — тоже изменение -> в БД
       check.addEventListener("click", (e) => {
         e.stopPropagation();
         t.done = !t.done;
@@ -1226,29 +1294,20 @@
         markTaskDirty(t);
         saveTasks(dateKey, tasks);
 
-        // если задача открыта — покажем кнопки (т.к. изменили)
         updateActionsVisibility();
-
         haptic("light");
       });
 
-      // OPEN/CLOSE card
       head.addEventListener("click", () => {
         if(openId === t.id){
-          // закрываем текущую -> автосейв
           closeCurrent("collapse");
           haptic("select");
           return;
         }
-
-        // переключение на другую -> автосейв старой/дня
         closeCurrent("switch");
         openId = t.id;
         card.classList.add("open");
-
-        // при открытии — корректная видимость кнопок
         updateActionsVisibility();
-
         haptic("select");
       });
 
@@ -1258,12 +1317,11 @@
         haptic("light");
       });
 
-      // DELETE (после удаления — сразу отправляем день в БД)
       delBtn.addEventListener("click", (e) => {
         e.stopPropagation();
 
         tasks = tasks.filter(x => x.id !== t.id);
-        setDayDirtyFlag(dateKey, true); // день изменился (удаление)
+        setDayDirtyFlag(dateKey, true);
         saveTasks(dateKey, tasks);
 
         if(openId === t.id) openId = null;
@@ -1272,28 +1330,18 @@
         setHint();
         if(tasks.length === 0) renderEmpty();
 
-        // автосейв сразу (удаление — это действие, лучше сразу фиксировать)
-        sendDayToDB("delete");
-        clearDirtyFlagsAll();
-
+        saveDay("delete");
         haptic("medium");
       });
 
-      // SAVE (ручной)
       saveBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-
-        // ручное сохранение всего дня (проще для бэка)
-        sendDayToDB("manual_task_save");
-
-        // очищаем флаги — чтобы кнопки пропали
-        clearDirtyFlagsAll();
-        updateActionsVisibility();
-
+        saveDay("manual_task_save").then((ok) => {
+          if(ok) updateActionsVisibility();
+        });
         haptic("medium");
       });
 
-      // PRIORITY change -> dirty
       prioBtns.addEventListener("click", (e) => {
         const btn = e.target.closest("button[data-prio]");
         if(!btn) return;
@@ -1319,7 +1367,6 @@
         haptic("light");
       });
 
-      // FIELDS input/change -> dirty + показываем Save
       const onField = (e) => {
         const el = e.target;
         const field = el?.dataset?.field;
@@ -1334,7 +1381,6 @@
         if(field === "title") t.title = el.value;
         if(field === "desc") t.desc = el.value;
 
-        // если реально изменилось — dirty
         if(prev[field] !== t[field]){
           markTaskDirty(t);
           updateActionsVisibility();
@@ -1377,7 +1423,6 @@
       }
     }
 
-    // === MENU BUTTONS -> AUTOSAVE ===
     backBtn.addEventListener("click", () => {
       autosaveIfNeeded("back");
       window.location.href = "calendar.html";
@@ -1385,8 +1430,6 @@
 
     plusBtn.addEventListener("click", () => {
       haptic("light");
-
-      // если что-то было не сохранено — автосейв перед созданием новой
       autosaveIfNeeded("plus");
 
       ensureNoEmptyState();
@@ -1402,7 +1445,6 @@
         createdAt: Date.now()
       });
 
-      // новая задача — кнопки должны быть сразу
       nt._isNew = true;
       nt._dirty = true;
       setDayDirtyFlag(dateKey, true);
@@ -1422,7 +1464,6 @@
     clearBtn.addEventListener("click", () => {
       if(tasks.length === 0) return;
 
-      // автосейв текущих изменений перед очисткой (на всякий)
       autosaveIfNeeded("before_clear");
 
       const ok = confirm("Очистить все задачи на этот день?");
@@ -1434,28 +1475,23 @@
       saveTasks(dateKey, tasks);
       render();
 
-      // очистка = сразу фиксируем в БД
-      sendDayToDB("clear_all");
-      clearDirtyFlagsAll();
-
+      saveDay("clear_all");
       haptic("medium");
     });
 
-    // === автосейв при уходе/сворачивании вебвью ===
     document.addEventListener("visibilitychange", () => {
       if(document.visibilityState === "hidden"){
         autosaveIfNeeded("visibility_hidden");
       }
     });
 
-    // если вдруг была грязь на этом дне (например, перезагрузка)
-    if(isDayDirty(dateKey)){
-      // попробуем сразу отправить на бот (чтобы БД догнала)
-      sendDayToDB("resume_dirty_day");
-      clearDirtyFlagsAll();
-    }
-
+    // старт
     render();
+    if(isDayDirty(dateKey)){
+      saveDay("resume_dirty_day").finally(() => pullDayFromServer());
+    } else {
+      pullDayFromServer();
+    }
   })();
   </script>
 </body>
