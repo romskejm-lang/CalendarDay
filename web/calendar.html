@@ -193,7 +193,6 @@
       transition: opacity .16s ease;
     }
 
-    /* ПК hover — НЕ ТРОГАЕМ */
     .navCell:hover{
       z-index: 10;
       transform: translateY(-4px) scale(1.02);
@@ -218,7 +217,6 @@
       --shade: .16;
     }
 
-    /* ✅ добавили: тап-анимация для nav на телефоне */
     .navCell.tap{
       z-index: 10;
       transform: translateY(-4px) scale(1.02);
@@ -340,7 +338,6 @@
       transform: scale(.985);
     }
 
-    /* ПК hover — НЕ ТРОГАЕМ */
     .cell:not(.empty):hover{
       z-index: 10;
       transform: translateY(-4px) scale(1.02);
@@ -353,7 +350,6 @@
     }
     .cell:not(.empty):hover{ --shade: .14; }
 
-    /* ✅ телефонная "hover-имитация" */
     .cell.tap{
       z-index: 10;
       transform: translateY(-4px) scale(1.02);
@@ -365,37 +361,34 @@
         0 10px 24px rgba(15,23,42,.14);
       --shade: .14;
     }
-	
-	/* убрать серый/синий подсвет тапа в моб. браузерах */
-	.dayBtn, .iconBtn{
-	  -webkit-tap-highlight-color: transparent;
-	  touch-action: manipulation;
-	}
 
-	/* Телефон: отдельный класс "продавить внутрь" (ПК hover не трогаем) */
-	@media (hover: none) and (pointer: coarse){
-	  .cell.press{
-		z-index: 12;
-		transform: translateY(1px) scale(.97);
-		border-color: rgba(255,255,255,.55);
-		box-shadow:
-		  inset 0 2px 12px rgba(15,23,42,.14),
-		  inset 0 1px 0 rgba(255,255,255,.55),
-		  0 8px 18px rgba(15,23,42,.12);
-		--shade: .18;
-	  }
+    .dayBtn, .iconBtn{
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
 
-	  .navCell.press{
-		transform: translateY(1px) scale(.97);
-		border-color: rgba(255,255,255,.55);
-		box-shadow:
-		  inset 0 2px 12px rgba(15,23,42,.14),
-		  inset 0 1px 0 rgba(255,255,255,.55),
-		  0 8px 18px rgba(15,23,42,.12);
-		--shade: .16;
-	  }
-	}
-	
+    @media (hover: none) and (pointer: coarse){
+      .cell.press{
+        z-index: 12;
+        transform: translateY(1px) scale(.97);
+        border-color: rgba(255,255,255,.55);
+        box-shadow:
+          inset 0 2px 12px rgba(15,23,42,.14),
+          inset 0 1px 0 rgba(255,255,255,.55),
+          0 8px 18px rgba(15,23,42,.12);
+        --shade: .18;
+      }
+
+      .navCell.press{
+        transform: translateY(1px) scale(.97);
+        border-color: rgba(255,255,255,.55);
+        box-shadow:
+          inset 0 2px 12px rgba(15,23,42,.14),
+          inset 0 1px 0 rgba(255,255,255,.55),
+          0 8px 18px rgba(15,23,42,.12);
+        --shade: .16;
+      }
+    }
 
     .cell:not(.empty):active,
     .cell:not(.empty):focus-within{
@@ -449,34 +442,26 @@
       .cell::after{ display:none; }
       .inner::before{ display:none; }
     }
-	
-	/* --- Task indicator dot (top-right) --- */
-	.dot{
-	  position:absolute;
-	  top:8px;
-	  right:8px;
-	  width:9px;
-	  height:9px;
-	  border-radius:999px;
-	  pointer-events:none;
-	  z-index:2;
 
-	  /* чтобы выглядел как “стеклянная бусина” */
-	  border: 1px solid rgba(255,255,255,.70);
-	  box-shadow:
-		0 6px 14px rgba(15,23,42,.14),
-		inset 0 1px 0 rgba(255,255,255,.55);
-	}
+    .dot{
+      position:absolute;
+      top:8px;
+      right:8px;
+      width:9px;
+      height:9px;
+      border-radius:999px;
+      pointer-events:none;
+      z-index:2;
 
-	/* цвета (зелёный максимально похож на твой скрин) */
-	.dot.green{  background:#22c55e; }  /* 1..3 */
-	.dot.yellow{ background:#facc15; }  /* 4..5 */
-	.dot.red{    background:#ef4444; }  /* 6..10 */
-	.dot.black{  background:#0f172a; }  /* >10 */
-	
-	
-	
-	
+      border: 1px solid rgba(255,255,255,.70);
+      box-shadow:
+        0 6px 14px rgba(15,23,42,.14),
+        inset 0 1px 0 rgba(255,255,255,.55);
+    }
+    .dot.green{  background:#22c55e; }
+    .dot.yellow{ background:#facc15; }
+    .dot.red{    background:#ef4444; }
+    .dot.black{  background:#0f172a; }
   </style>
 </head>
 
@@ -513,62 +498,83 @@
     const tg = window.Telegram?.WebApp;
     tg?.ready();
     tg?.expand();
-	
-	const isTouch = window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches;
 
-	let selectedCellEl = null;   // только для телефона: чтобы не делать render()
-	let isNavigating = false;    // защита от двойного клика в момент перехода
+    // ===== API / AUTH =====
+    const API_BASE = (location.protocol === "file:" || location.hostname === "127.0.0.1" || location.hostname === "localhost")
+      ? "http://127.0.0.1:8081"
+      : "";
 
-	function haptic(kind="light"){
-	  if(!isTouch) return;
+    function apiUrl(path){
+      const base = (API_BASE || "").replace(/\/$/, "");
+      return base ? (base + path) : path;
+    }
 
-	  // Telegram haptics (лучше всего)
-	  try{
-		const hf = tg?.HapticFeedback;
-		if(hf){
-		  if(kind === "select" && hf.selectionChanged){
-			hf.selectionChanged();
-			return;
-		  }
-		  if(hf.impactOccurred){
-			hf.impactOccurred(kind === "medium" ? "medium" : "light");
-			return;
-		  }
-		}
-	  }catch(e){}
+    const USER_ID = String(
+      tg?.initDataUnsafe?.user?.id ||
+      localStorage.getItem("dev_uid") ||
+      "123"
+    );
 
-	  // fallback
-	  if(navigator.vibrate){
-		navigator.vibrate(kind === "medium" ? 18 : 10);
-	  }
-	}
+    function authHeaders(){
+      const h = {};
+      if (tg?.initData) h["X-Tg-Init-Data"] = tg.initData;
+      else h["X-Dev-User-Id"] = USER_ID;
+      return h;
+    }
 
-	function pulseCell(cell){
-	  if(!isTouch || !cell) return;
-	  cell.classList.remove("tap");
-	  void cell.offsetWidth;
-	  cell.classList.add("tap");
-	  setTimeout(() => cell.classList.remove("tap"), 170);
-	}
+    async function fetchJSON(url){
+      const res = await fetch(url, { headers: authHeaders() });
+      if(!res.ok){
+        const txt = await res.text().catch(()=> "");
+        throw new Error(`HTTP ${res.status}: ${txt || res.statusText}`);
+      }
+      return await res.json().catch(()=> ({}));
+    }
 
-	function pressCell(el){
-	  if(!isTouch || !el) return;
-	  el.classList.remove("press");
-	  void el.offsetWidth;
-	  el.classList.add("press");
-	  setTimeout(() => el.classList.remove("press"), 170);
-	}
+    // ===== UI / TOUCH =====
+    const isTouch = window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches;
 
-	function setSelectedTouch(cell, k){
-	  // не пересобираем DOM => анимация не умирает
-	  if(selectedCellEl) selectedCellEl.classList.remove("selected");
-	  cell.classList.add("selected");
-	  selectedCellEl = cell;
+    let selectedCellEl = null;
+    let isNavigating = false;
 
-	  view.selectedKey = k;
-	  saveState();
-	}
-	
+    function haptic(kind="light"){
+      if(!isTouch) return;
+
+      try{
+        const hf = tg?.HapticFeedback;
+        if(hf){
+          if(kind === "select" && hf.selectionChanged){ hf.selectionChanged(); return; }
+          if(hf.impactOccurred){ hf.impactOccurred(kind === "medium" ? "medium" : "light"); return; }
+        }
+      }catch{}
+
+      if(navigator.vibrate) navigator.vibrate(kind === "medium" ? 18 : 10);
+    }
+
+    function pulseCell(cell){
+      if(!isTouch || !cell) return;
+      cell.classList.remove("tap");
+      void cell.offsetWidth;
+      cell.classList.add("tap");
+      setTimeout(() => cell.classList.remove("tap"), 170);
+    }
+
+    function pressCell(el){
+      if(!isTouch || !el) return;
+      el.classList.remove("press");
+      void el.offsetWidth;
+      el.classList.add("press");
+      setTimeout(() => el.classList.remove("press"), 170);
+    }
+
+    function setSelectedTouch(cell, k){
+      if(selectedCellEl) selectedCellEl.classList.remove("selected");
+      cell.classList.add("selected");
+      selectedCellEl = cell;
+
+      view.selectedKey = k;
+      saveState();
+    }
 
     const monthNames = [
       "Январь","Февраль","Март","Апрель","Май","Июнь",
@@ -583,44 +589,20 @@
     const today = new Date();
     const todayKey = keyOf(today);
 
+    // state per-user (чтобы разные TG аккаунты не мешались)
+    const STATE_KEY = `glass_calendar_state_${USER_ID}`;
+
     let view = loadState() || {
       year: today.getFullYear(),
       month: today.getMonth(),
       selectedKey: todayKey
     };
 
-    function isTouchPointer(e){
-      // pointerType есть в современных WebView Telegram на Android
-      return e && (e.pointerType === "touch");
-    }
-
-    function hapticLight(){
-      try{
-        if (tg?.HapticFeedback?.impactOccurred) {
-          tg.HapticFeedback.impactOccurred("light");
-          return;
-        }
-      }catch{}
-      try{ navigator.vibrate?.(10); }catch{}
-    }
-
-    function hapticMedium(){
-      try{
-        if (tg?.HapticFeedback?.impactOccurred) {
-          tg.HapticFeedback.impactOccurred("medium");
-          return;
-        }
-      }catch{}
-      try{ navigator.vibrate?.(18); }catch{}
-    }
-
-    function pulse(el){
-      if(!el) return;
-      el.classList.remove("tap");
-      void el.offsetWidth;
-      el.classList.add("tap");
-      setTimeout(() => el.classList.remove("tap"), 170);
-    }
+    // ===== month counts from server =====
+    // { "YYYY-MM-DD": number }
+    let monthCounts = {};
+    // кеш по "YYYY-MM" чтобы не долбить API при лишних render()
+    const monthCache = new Map();
 
     function keyOf(d){
       const y = d.getFullYear();
@@ -630,12 +612,12 @@
     }
 
     function saveState(){
-      localStorage.setItem("glass_calendar_state", JSON.stringify(view));
+      localStorage.setItem(STATE_KEY, JSON.stringify(view));
     }
 
     function loadState(){
       try{
-        const raw = localStorage.getItem("glass_calendar_state");
+        const raw = localStorage.getItem(STATE_KEY);
         if(!raw) return null;
         const v = JSON.parse(raw);
         if(typeof v?.year !== "number" || typeof v?.month !== "number") return null;
@@ -652,31 +634,40 @@
       return new Date(year, month + 1, 0).getDate();
     }
 
+    function dotClassForCount(n){
+      if(n <= 0) return null;
+      if(n <= 3) return "green";
+      if(n <= 5) return "yellow";
+      if(n <= 10) return "red";
+      return "black";
+    }
 
-	const TASKS_STORE_KEY = "glass_tasks_v1"; // как в day.html
+    function getTaskCount(dateKey){
+      const n = monthCounts?.[dateKey];
+      return Number.isFinite(+n) ? +n : 0;
+    }
 
-	function getTaskCount(dateKey){
-	  try{
-		const all = JSON.parse(localStorage.getItem(TASKS_STORE_KEY) || "{}");
-		const arr = all?.[dateKey];
-		return Array.isArray(arr) ? arr.length : 0;
-	  }catch{
-		return 0;
-	  }
-	}
+    async function loadMonthCounts(year, month0){
+      const month1 = month0 + 1; // API ждёт 1..12
+      const cacheKey = `${year}-${String(month1).padStart(2,"0")}`;
+      if(monthCache.has(cacheKey)){
+        monthCounts = monthCache.get(cacheKey) || {};
+        return;
+      }
 
-
-	function dotClassForCount(n){
-	  if(n <= 0) return null;
-	  if(n <= 3) return "green";
-	  if(n <= 5) return "yellow";
-	  if(n <= 10) return "red";
-	  return "black";
-	}
-
+      try{
+        const data = await fetchJSON(apiUrl(`/api/month?year=${encodeURIComponent(year)}&month=${encodeURIComponent(month1)}`));
+        const counts = (data && typeof data.counts === "object" && data.counts) ? data.counts : {};
+        monthCounts = counts;
+        monthCache.set(cacheKey, counts);
+      }catch(e){
+        // если сервер недоступен — просто без точек, UI живой
+        monthCounts = {};
+      }
+    }
 
     function render(){
-	  selectedCellEl = null;
+      selectedCellEl = null;
       titleEl.textContent = `${monthNames[view.month]} ${view.year}`;
       gridEl.innerHTML = "";
 
@@ -694,24 +685,22 @@
 
         const cell = document.createElement("div");
         cell.className = "cell";
-		cell.dataset.key = k;
-
+        cell.dataset.key = k;
 
         if(k === todayKey) cell.classList.add("today");
         if(k === view.selectedKey){
-		  cell.classList.add("selected");
-		  selectedCellEl = cell; // чтобы телефон знал, что сейчас выбрано
-		}
+          cell.classList.add("selected");
+          selectedCellEl = cell;
+        }
 
-		const count = getTaskCount(k);
-		const cls = dotClassForCount(count);
-		if(cls){
-		  const dot = document.createElement("span");
-		  dot.className = `dot ${cls}`;
-		  dot.title = `${count} задач`; // optional
-		  cell.appendChild(dot);
-		}
-
+        const count = getTaskCount(k);
+        const cls = dotClassForCount(count);
+        if(cls){
+          const dot = document.createElement("span");
+          dot.className = `dot ${cls}`;
+          dot.title = `${count} задач`;
+          cell.appendChild(dot);
+        }
 
         const btn = document.createElement("button");
         btn.className = "dayBtn";
@@ -719,44 +708,38 @@
         btn.textContent = day;
         btn.setAttribute("data-key", k);
 
-        // ✅ На телефоне запускаем lift сразу при касании (до click)
-		btn.addEventListener("click", () => {
-		  if(isNavigating) return;
+        btn.addEventListener("click", () => {
+          if(isNavigating) return;
 
-		  const isSecondTap = (view.selectedKey === k);
+          const isSecondTap = (view.selectedKey === k);
 
-		  // --- ТЕЛЕФОН ---
-		  if(isTouch){
-			if(!isSecondTap){
-			  // 1-й тап: подпрыгнул + мягкая хаптика + выбрать без render()
-			  pulseCell(cell);
-			  haptic("select");
-			  setSelectedTouch(cell, k);
-			  return;
-			}
+          if(isTouch){
+            if(!isSecondTap){
+              pulseCell(cell);
+              haptic("select");
+              setSelectedTouch(cell, k);
+              return;
+            }
 
-			// 2-й тап: продавить + более сильная хаптика + задержка и переход
-			isNavigating = true;
-			pressCell(cell);
-			haptic("medium");
+            isNavigating = true;
+            pressCell(cell);
+            haptic("medium");
 
-			setTimeout(() => {
-			  window.location.href = `day.html?date=${encodeURIComponent(k)}`;
-			}, 140); // можешь играться 120..180
-			return;
-		  }
+            setTimeout(() => {
+              window.location.href = `day.html?date=${encodeURIComponent(k)}`;
+            }, 140);
+            return;
+          }
 
-		  // --- ПК (оставляем как было, hover не трогаем) ---
-		  if(!isSecondTap){
-			view.selectedKey = k;
-			saveState();
-			render();
-			return;
-		  }
+          if(!isSecondTap){
+            view.selectedKey = k;
+            saveState();
+            render();
+            return;
+          }
 
-		  window.location.href = `day.html?date=${encodeURIComponent(k)}`;
-		});
-
+          window.location.href = `day.html?date=${encodeURIComponent(k)}`;
+        });
 
         cell.appendChild(btn);
         gridEl.appendChild(cell);
@@ -776,7 +759,22 @@
       return c;
     }
 
-    // ✅ Тап-анимация + хаптик на навигации месяцев (телефон)
+    function isTouchPointer(e){
+      return e && (e.pointerType === "touch");
+    }
+
+    function pulse(el){
+      if(!el) return;
+      el.classList.remove("tap");
+      void el.offsetWidth;
+      el.classList.add("tap");
+      setTimeout(() => el.classList.remove("tap"), 170);
+    }
+
+    function hapticLight(){ haptic("light"); }
+    function hapticMedium(){ haptic("medium"); }
+
+    // nav tap animation on phone (твоя логика)
     prevBtn.addEventListener("pointerdown", (e) => {
       if (!isTouchPointer(e)) return;
       prevBtn.dataset.tp = "1";
@@ -791,6 +789,13 @@
       hapticLight();
     }, { passive: true });
 
+	function rerenderWithMonth(){
+	  render(); // ✅ сразу рисуем месяц (без точек)
+	  loadMonthCounts(view.year, view.month)
+		.then(() => render())  // ✅ потом дорисуем точки
+		.catch(() => {});      // если упало — просто остаётся без точек
+	}
+
     prevBtn.addEventListener("click", () => {
       const touched = (prevBtn.dataset.tp === "1");
       if (touched) delete prevBtn.dataset.tp;
@@ -800,10 +805,9 @@
       saveState();
 
       if (touched) {
-        // ✅ даём тап-анимации дожить
-        setTimeout(render, 170);
+        setTimeout(() => { rerenderWithMonth(); }, 170);
       } else {
-        render();
+        rerenderWithMonth();
       }
     });
 
@@ -816,13 +820,14 @@
       saveState();
 
       if (touched) {
-        setTimeout(render, 170);
+        setTimeout(() => { rerenderWithMonth(); }, 170);
       } else {
-        render();
+        rerenderWithMonth();
       }
     });
 
-    render();
+    // старт
+    rerenderWithMonth();
   </script>
 </body>
 </html>
